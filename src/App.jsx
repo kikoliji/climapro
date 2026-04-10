@@ -40,6 +40,8 @@ const STYLE = `
   .card { background:${COLORS.card}; border:1px solid ${COLORS.border}; border-radius:14px; }
   .card:hover { border-color:rgba(0,196,255,0.25); }
   label { font-size:12px; color:${COLORS.muted}; font-weight:500; letter-spacing:.5px; text-transform:uppercase; display:block; margin-bottom:5px; }
+  .folder-row { display:flex; align-items:center; gap:10; padding:12px 16px; cursor:pointer; border-radius:10px; transition:background .15s; }
+  .folder-row:hover { background:rgba(0,196,255,0.07); }
 `;
 
 const TRABAJADORES = ["Carlos M.", "Ana R.", "Pedro S.", "Laura T.", "Miguel F.", "José A."];
@@ -83,7 +85,7 @@ const NAV_ITEMS = [
 function Modal({ title, onClose, children }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div className="card" style={{ width:"100%", maxWidth:520, padding:24, position:"relative" }}>
+      <div className="card" style={{ width:"100%", maxWidth:520, padding:24 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
           <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
@@ -230,7 +232,7 @@ function Fichajes({ fichajes, setFichajes }) {
             </div>
             <div><label>Salida (opcional)</label><input className="input" type="time" value={form.salida} onChange={e => setForm({...form, salida:e.target.value})} /></div>
             <div><label>Notas</label><input className="input" placeholder="Trabajo realizado..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:4 }}>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardar}>Guardar</button>
             </div>
@@ -408,7 +410,7 @@ function Albaranes({ albaranes, setAlbaranes }) {
   );
 }
 
-// ─── MANUALES con Firebase + Eliminar ────────────────────────────────────────
+// ─── MANUALES con carpetas por Marca > Tipo ───────────────────────────────────
 function Manuales({ onManualesChange }) {
   const [manuales, setManuales] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -416,6 +418,8 @@ function Manuales({ onManualesChange }) {
   const [guardando, setGuardando] = useState(false);
   const [buscar, setBuscar] = useState("");
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [marcaAbierta, setMarcaAbierta] = useState(null);
+  const [tipoAbierto, setTipoAbierto] = useState(null);
   const [form, setForm] = useState({ titulo:"", marca:"", tipo:"Instalación", url:"", fecha:new Date().toISOString().split("T")[0] });
 
   useEffect(() => {
@@ -443,51 +447,124 @@ function Manuales({ onManualesChange }) {
     setConfirmarEliminar(null);
   };
 
-  const lista = manuales.filter(m =>
-    m.titulo.toLowerCase().includes(buscar.toLowerCase()) ||
-    m.marca.toLowerCase().includes(buscar.toLowerCase())
-  );
+  const tipoColor = { Instalación:COLORS.accent, Mantenimiento:COLORS.green, Técnico:COLORS.warm, Protocolo:COLORS.yellow, Otro:COLORS.muted };
 
-  const tipoColor = { Instalación:COLORS.accent, Mantenimiento:COLORS.green, Técnico:COLORS.warm, Protocolo:COLORS.yellow };
+  // Agrupar por marca > tipo
+  const porMarca = {};
+  const listaFiltrada = buscar
+    ? manuales.filter(m => m.titulo.toLowerCase().includes(buscar.toLowerCase()) || m.marca.toLowerCase().includes(buscar.toLowerCase()))
+    : manuales;
+
+  listaFiltrada.forEach(m => {
+    if (!porMarca[m.marca]) porMarca[m.marca] = {};
+    if (!porMarca[m.marca][m.tipo]) porMarca[m.marca][m.tipo] = [];
+    porMarca[m.marca][m.tipo].push(m);
+  });
+
+  const marcas = Object.keys(porMarca).sort();
 
   return (
     <div>
       <Header title="Biblioteca de Manuales ☁" onAdd={() => setModal(true)} addLabel="+ Añadir manual" />
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-        <input className="input" placeholder="🔍  Buscar por título o marca..." value={buscar} onChange={e => setBuscar(e.target.value)} style={{ maxWidth:400 }} />
+        <input className="input" placeholder="🔍  Buscar por título o marca..." value={buscar}
+          onChange={e => { setBuscar(e.target.value); setMarcaAbierta(null); setTipoAbierto(null); }}
+          style={{ maxWidth:400 }} />
         <span style={{ fontSize:12, color:COLORS.green }}>✓ Sincronizado con la nube</span>
       </div>
 
       {cargando ? (
         <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Cargando manuales...</div>
-      ) : lista.length === 0 ? (
+      ) : marcas.length === 0 ? (
         <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>
           {buscar ? "No se encontraron resultados" : "Aún no hay manuales. ¡Añade el primero!"}
         </div>
-      ) : (
+      ) : buscar ? (
+        // Vista plana cuando se busca
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
-          {lista.map(m => (
+          {listaFiltrada.map(m => (
             <div key={m.id} className="card" style={{ padding:18, borderTop:`3px solid ${tipoColor[m.tipo]||COLORS.muted}` }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
                 <span className="badge" style={{ background:`${tipoColor[m.tipo]}22`, color:tipoColor[m.tipo]||COLORS.muted }}>{m.tipo}</span>
-                <span style={{ fontSize:11, color:COLORS.muted }}>{m.fecha}</span>
+                <span style={{ fontSize:11, color:COLORS.muted }}>{m.marca}</span>
               </div>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:6, lineHeight:1.4 }}>{m.titulo}</div>
-              <div style={{ fontSize:12, color:COLORS.muted, marginBottom:12 }}>Marca: {m.marca}</div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              <div style={{ fontSize:14, fontWeight:600, marginBottom:12, lineHeight:1.4 }}>{m.titulo}</div>
+              <div style={{ display:"flex", gap:8 }}>
                 {m.url && m.url !== "#" && (
-                  <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6, display:"inline-block" }}>
-                    📥 Ver manual
-                  </a>
+                  <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6 }}>📥 Ver</a>
                 )}
-                <button className="btn btn-danger" onClick={() => setConfirmarEliminar(m)}>🗑 Eliminar</button>
+                <button className="btn btn-danger" onClick={() => setConfirmarEliminar(m)}>🗑</button>
               </div>
             </div>
           ))}
         </div>
+      ) : (
+        // Vista de carpetas
+        <div className="card" style={{ padding:8 }}>
+          {marcas.map(marca => {
+            const marcaOpen = marcaAbierta === marca;
+            const tipos = Object.keys(porMarca[marca]).sort();
+            const totalMarca = Object.values(porMarca[marca]).reduce((s, arr) => s + arr.length, 0);
+
+            return (
+              <div key={marca}>
+                {/* Carpeta MARCA */}
+                <div className="folder-row" onClick={() => { setMarcaAbierta(marcaOpen ? null : marca); setTipoAbierto(null); }}>
+                  <span style={{ fontSize:18 }}>{marcaOpen ? "📂" : "📁"}</span>
+                  <span style={{ fontWeight:600, fontSize:14, flex:1 }}>{marca}</span>
+                  <span style={{ fontSize:12, color:COLORS.muted }}>{totalMarca} manual{totalMarca !== 1 ? "es" : ""}</span>
+                  <span style={{ color:COLORS.muted, fontSize:12, marginLeft:8 }}>{marcaOpen ? "▲" : "▼"}</span>
+                </div>
+
+                {marcaOpen && (
+                  <div style={{ paddingLeft:24 }}>
+                    {tipos.map(tipo => {
+                      const tipoOpen = tipoAbierto === `${marca}-${tipo}`;
+                      const items = porMarca[marca][tipo];
+
+                      return (
+                        <div key={tipo}>
+                          {/* Subcarpeta TIPO */}
+                          <div className="folder-row" onClick={() => setTipoAbierto(tipoOpen ? null : `${marca}-${tipo}`)}>
+                            <span style={{ fontSize:16 }}>{tipoOpen ? "📂" : "📁"}</span>
+                            <span style={{ fontSize:13, flex:1, color:tipoColor[tipo]||COLORS.muted }}>{tipo}</span>
+                            <span style={{ fontSize:12, color:COLORS.muted }}>{items.length} manual{items.length !== 1 ? "es" : ""}</span>
+                            <span style={{ color:COLORS.muted, fontSize:12, marginLeft:8 }}>{tipoOpen ? "▲" : "▼"}</span>
+                          </div>
+
+                          {tipoOpen && (
+                            <div style={{ paddingLeft:24 }}>
+                              {items.map(m => (
+                                <div key={m.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 16px", borderRadius:8, borderBottom:`1px solid ${COLORS.border}` }}>
+                                  <span style={{ fontSize:16 }}>📄</span>
+                                  <div style={{ flex:1 }}>
+                                    <div style={{ fontSize:13, fontWeight:500 }}>{m.titulo}</div>
+                                    <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{m.fecha}</div>
+                                  </div>
+                                  <div style={{ display:"flex", gap:8 }}>
+                                    {m.url && m.url !== "#" && (
+                                      <a href={m.url} target="_blank" rel="noreferrer"
+                                        style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"4px 10px", borderRadius:6 }}>
+                                        📥 Ver
+                                      </a>
+                                    )}
+                                    <button className="btn btn-danger" onClick={() => setConfirmarEliminar(m)}>🗑</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* Modal confirmar eliminar */}
       {confirmarEliminar && (
         <Modal title="¿Eliminar manual?" onClose={() => setConfirmarEliminar(null)}>
           <div style={{ marginBottom:20 }}>
@@ -529,7 +606,6 @@ function Manuales({ onManualesChange }) {
   );
 }
 
-// ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [section, setSection] = useState("dashboard");
   const [data, setData] = useState(initialData);
