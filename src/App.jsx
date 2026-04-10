@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
-  collection, addDoc, onSnapshot, orderBy, query
+  collection, addDoc, onSnapshot, orderBy, query, deleteDoc, doc
 } from "firebase/firestore";
 
 const COLORS = {
@@ -32,6 +32,8 @@ const STYLE = `
   .btn-primary:hover { background:${COLORS.accentDim}; transform:translateY(-1px); }
   .btn-ghost { background:transparent; color:${COLORS.muted}; border:1px solid ${COLORS.border}; }
   .btn-ghost:hover { border-color:${COLORS.accent}; color:${COLORS.accent}; }
+  .btn-danger { background:transparent; color:${COLORS.danger}; border:1px solid ${COLORS.danger}33; font-size:12px; padding:5px 10px; }
+  .btn-danger:hover { background:${COLORS.danger}22; }
   .input { background:${COLORS.surface}; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:9px 13px; font-size:13px; font-family:'Inter',sans-serif; width:100%; outline:none; transition:border .2s; }
   .input:focus { border-color:${COLORS.accent}; }
   .select { background:${COLORS.surface}; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:9px 13px; font-size:13px; font-family:'Inter',sans-serif; outline:none; cursor:pointer; }
@@ -406,13 +408,14 @@ function Albaranes({ albaranes, setAlbaranes }) {
   );
 }
 
-// ─── MANUALES con Firebase ────────────────────────────────────────────────────
+// ─── MANUALES con Firebase + Eliminar ────────────────────────────────────────
 function Manuales({ onManualesChange }) {
   const [manuales, setManuales] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [buscar, setBuscar] = useState("");
+  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [form, setForm] = useState({ titulo:"", marca:"", tipo:"Instalación", url:"", fecha:new Date().toISOString().split("T")[0] });
 
   useEffect(() => {
@@ -433,6 +436,11 @@ function Manuales({ onManualesChange }) {
     setGuardando(false);
     setModal(false);
     setForm({ titulo:"", marca:"", tipo:"Instalación", url:"", fecha:new Date().toISOString().split("T")[0] });
+  };
+
+  const eliminar = async (id) => {
+    await deleteDoc(doc(db, "manuales", id));
+    setConfirmarEliminar(null);
   };
 
   const lista = manuales.filter(m =>
@@ -466,14 +474,32 @@ function Manuales({ onManualesChange }) {
               </div>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:6, lineHeight:1.4 }}>{m.titulo}</div>
               <div style={{ fontSize:12, color:COLORS.muted, marginBottom:12 }}>Marca: {m.marca}</div>
-              {m.url && m.url !== "#" && (
-                <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6, display:"inline-block" }}>
-                  📥 Ver manual
-                </a>
-              )}
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                {m.url && m.url !== "#" && (
+                  <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6, display:"inline-block" }}>
+                    📥 Ver manual
+                  </a>
+                )}
+                <button className="btn btn-danger" onClick={() => setConfirmarEliminar(m)}>🗑 Eliminar</button>
+              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Modal confirmar eliminar */}
+      {confirmarEliminar && (
+        <Modal title="¿Eliminar manual?" onClose={() => setConfirmarEliminar(null)}>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:14, marginBottom:8 }}>Vas a eliminar:</div>
+            <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.titulo}</div>
+            <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>Esta acción no se puede deshacer.</div>
+          </div>
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button className="btn btn-ghost" onClick={() => setConfirmarEliminar(null)}>Cancelar</button>
+            <button className="btn" style={{ background:COLORS.danger, color:"#fff" }} onClick={() => eliminar(confirmarEliminar.id)}>Sí, eliminar</button>
+          </div>
+        </Modal>
       )}
 
       {modal && (
