@@ -1,0 +1,553 @@
+import { useState, useEffect } from "react";
+import { db } from "./firebase";
+import {
+  collection, addDoc, onSnapshot, orderBy, query
+} from "firebase/firestore";
+
+const COLORS = {
+  bg: "#0f1117",
+  surface: "#1a1d27",
+  card: "#1e2130",
+  border: "#2a2d3e",
+  accent: "#00c4ff",
+  accentDim: "#0099cc",
+  accentGlow: "rgba(0,196,255,0.15)",
+  warm: "#ff6b35",
+  green: "#00e676",
+  yellow: "#ffd600",
+  text: "#e8eaf0",
+  muted: "#8b8fa8",
+  danger: "#ff4757",
+};
+
+const STYLE = `
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: ${COLORS.bg}; color: ${COLORS.text}; font-family: 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: ${COLORS.bg}; }
+  ::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 3px; }
+  .badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:.5px; }
+  .btn { cursor:pointer; border:none; font-family:'Inter',sans-serif; font-size:13px; font-weight:500; border-radius:8px; padding:8px 16px; transition:all .2s; }
+  .btn-primary { background:${COLORS.accent}; color:#000; }
+  .btn-primary:hover { background:${COLORS.accentDim}; transform:translateY(-1px); }
+  .btn-ghost { background:transparent; color:${COLORS.muted}; border:1px solid ${COLORS.border}; }
+  .btn-ghost:hover { border-color:${COLORS.accent}; color:${COLORS.accent}; }
+  .input { background:${COLORS.surface}; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:9px 13px; font-size:13px; font-family:'Inter',sans-serif; width:100%; outline:none; transition:border .2s; }
+  .input:focus { border-color:${COLORS.accent}; }
+  .select { background:${COLORS.surface}; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:9px 13px; font-size:13px; font-family:'Inter',sans-serif; outline:none; cursor:pointer; }
+  .card { background:${COLORS.card}; border:1px solid ${COLORS.border}; border-radius:14px; }
+  .card:hover { border-color:rgba(0,196,255,0.25); }
+  label { font-size:12px; color:${COLORS.muted}; font-weight:500; letter-spacing:.5px; text-transform:uppercase; display:block; margin-bottom:5px; }
+`;
+
+const TRABAJADORES = ["Carlos M.", "Ana R.", "Pedro S.", "Laura T.", "Miguel F.", "José A."];
+const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
+const ESTADOS_ENCARGO = ["Pendiente", "En curso", "Completado", "Cancelado"];
+
+const initialData = {
+  fichajes: [
+    { id: 1, trabajador: "Carlos M.", entrada: "08:00", salida: "17:00", fecha: "2026-04-09", notas: "Instalación split" },
+    { id: 2, trabajador: "Ana R.", entrada: "08:30", salida: "17:30", fecha: "2026-04-09", notas: "" },
+    { id: 3, trabajador: "Pedro S.", entrada: "07:45", salida: "16:45", fecha: "2026-04-08", notas: "Mantenimiento VRV" },
+  ],
+  albaranes: [
+    { id: 1, numero: "ALB-2026-001", cliente: "Hotel Sol & Mar", fecha: "2026-04-05", importe: 1840, estado: "Cobrado", descripcion: "Mantenimiento anual 4 unidades" },
+    { id: 2, numero: "ALB-2026-002", cliente: "Oficinas Central SA", fecha: "2026-04-07", importe: 3200, estado: "Enviado", descripcion: "Instalación sistema VRV" },
+    { id: 3, numero: "ALB-2026-003", cliente: "Residencial Las Palmas", fecha: "2026-04-09", importe: 760, estado: "Borrador", descripcion: "Sustitución unidad exterior" },
+  ],
+  encargos: [
+    { id: 1, titulo: "Instalación split 3x1 - Clínica Salud", cliente: "Clínica Salud", asignado: "Carlos M.", prioridad: "Alta", estado: "En curso", fecha: "2026-04-10", notas: "Acceso por planta 2" },
+    { id: 2, titulo: "Revisión anual - Hotel Mar Azul", cliente: "Hotel Mar Azul", asignado: "Ana R.", prioridad: "Media", estado: "Pendiente", fecha: "2026-04-15", notas: "" },
+    { id: 3, titulo: "Reparación avería - Supermercado Norte", cliente: "Supermercado Norte", asignado: "Pedro S.", prioridad: "Urgente", estado: "Completado", fecha: "2026-04-08", notas: "Compresor sustituido" },
+  ],
+};
+
+function calcHoras(entrada, salida) {
+  if (!entrada || !salida) return "-";
+  const [h1, m1] = entrada.split(":").map(Number);
+  const [h2, m2] = salida.split(":").map(Number);
+  const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+const NAV_ITEMS = [
+  { id: "dashboard", label: "Dashboard", icon: "⬛" },
+  { id: "fichajes", label: "Control Horario", icon: "⏱" },
+  { id: "encargos", label: "Encargos", icon: "🔧" },
+  { id: "albaranes", label: "Albaranes", icon: "📄" },
+  { id: "manuales", label: "Manuales", icon: "📚" },
+];
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div className="card" style={{ width:"100%", maxWidth:520, padding:24, position:"relative" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
+          <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EstadoBadge({ estado }) {
+  const colors = {
+    Cobrado: { bg:"rgba(0,230,118,.15)", color:COLORS.green },
+    Enviado: { bg:"rgba(0,196,255,.15)", color:COLORS.accent },
+    Borrador: { bg:"rgba(139,143,168,.15)", color:COLORS.muted },
+    Pendiente: { bg:"rgba(255,214,0,.15)", color:COLORS.yellow },
+    "En curso": { bg:"rgba(0,196,255,.15)", color:COLORS.accent },
+    Completado: { bg:"rgba(0,230,118,.15)", color:COLORS.green },
+    Cancelado: { bg:"rgba(255,71,87,.15)", color:COLORS.danger },
+    Urgente: { bg:"rgba(255,71,87,.2)", color:COLORS.danger },
+    Alta: { bg:"rgba(255,107,53,.2)", color:COLORS.warm },
+    Media: { bg:"rgba(255,214,0,.15)", color:COLORS.yellow },
+    Baja: { bg:"rgba(139,143,168,.15)", color:COLORS.muted },
+  };
+  const c = colors[estado] || { bg:"rgba(139,143,168,.15)", color:COLORS.muted };
+  return <span className="badge" style={{ background:c.bg, color:c.color, marginTop:3 }}>{estado}</span>;
+}
+
+function Header({ title, onAdd, addLabel }) {
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+      <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>{title}</h2>
+      {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
+    </div>
+  );
+}
+
+function Dashboard({ data, manuales }) {
+  const hoy = new Date().toISOString().split("T")[0];
+  const fichajesHoy = data.fichajes.filter(f => f.fecha === hoy).length;
+  const encargosActivos = data.encargos.filter(e => e.estado === "En curso" || e.estado === "Pendiente").length;
+  const albaranesPendientes = data.albaranes.filter(a => a.estado !== "Cobrado").length;
+  const totalFacturado = data.albaranes.filter(a => a.estado === "Cobrado").reduce((s, a) => s + a.importe, 0);
+
+  const stats = [
+    { label: "Fichajes hoy", value: fichajesHoy, color: COLORS.accent, icon: "⏱" },
+    { label: "Encargos activos", value: encargosActivos, color: COLORS.warm, icon: "🔧" },
+    { label: "Albaranes pendientes", value: albaranesPendientes, color: COLORS.yellow, icon: "📄" },
+    { label: "Facturado (cobrado)", value: `${totalFacturado.toLocaleString()}€`, color: COLORS.green, icon: "💶" },
+  ];
+
+  const urgentes = data.encargos.filter(e => e.prioridad === "Urgente" && e.estado !== "Completado");
+
+  return (
+    <div>
+      <div style={{ fontFamily:"Rajdhani", fontSize:28, fontWeight:700, marginBottom:24 }}>
+        Panel de Control <span style={{ color:COLORS.accent }}>ClimaPro</span>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:16, marginBottom:28 }}>
+        {stats.map(s => (
+          <div key={s.label} className="card" style={{ padding:20, borderLeft:`3px solid ${s.color}` }}>
+            <div style={{ fontSize:24, marginBottom:8 }}>{s.icon}</div>
+            <div style={{ fontSize:28, fontWeight:700, fontFamily:"Rajdhani", color:s.color }}>{s.value}</div>
+            <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+        <div className="card" style={{ padding:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>⚠ Encargos Urgentes</div>
+          {urgentes.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos urgentes pendientes</div>
+            : urgentes.map(e => (
+              <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{e.titulo}</div>
+                <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>{e.asignado} · {e.fecha}</div>
+              </div>
+            ))
+          }
+        </div>
+        <div className="card" style={{ padding:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>
+            📚 Manuales en nube: <span style={{ color:COLORS.green }}>{manuales.length}</span>
+          </div>
+          {manuales.slice(0,3).map(m => (
+            <div key={m.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize:13, fontWeight:500 }}>{m.titulo}</div>
+              <div style={{ fontSize:12, color:COLORS.muted }}>{m.marca} · {m.tipo}</div>
+            </div>
+          ))}
+          {manuales.length === 0 && <div style={{ color:COLORS.muted, fontSize:13 }}>Aún no hay manuales guardados</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Fichajes({ fichajes, setFichajes }) {
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState({ trabajador: TRABAJADORES[0], fecha: new Date().toISOString().split("T")[0], entrada: "08:00", salida: "", notas: "" });
+
+  const guardar = () => {
+    setFichajes(prev => [...prev, { ...form, id: Date.now() }]);
+    setModal(false);
+  };
+
+  return (
+    <div>
+      <Header title="Control Horario" onAdd={() => setModal(true)} addLabel="+ Fichar" />
+      <div className="card" style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+              {["Trabajador","Fecha","Entrada","Salida","Horas","Notas"].map(h => (
+                <th key={h} style={{ padding:"12px 16px", textAlign:"left", fontSize:11, color:COLORS.muted, fontWeight:600, letterSpacing:".5px", textTransform:"uppercase" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {fichajes.map(f => (
+              <tr key={f.id} style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+                <td style={{ padding:"12px 16px", fontSize:13, fontWeight:500 }}>{f.trabajador}</td>
+                <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.muted }}>{f.fecha}</td>
+                <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.green }}>{f.entrada}</td>
+                <td style={{ padding:"12px 16px", fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>{f.salida || "—"}</td>
+                <td style={{ padding:"12px 16px", fontSize:13, fontFamily:"Rajdhani", fontWeight:600, color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</td>
+                <td style={{ padding:"12px 16px", fontSize:12, color:COLORS.muted }}>{f.notas || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <Modal title="Registrar Fichaje" onClose={() => setModal(false)}>
+          <div style={{ display:"grid", gap:16 }}>
+            <div><label>Trabajador</label>
+              <select className="select" style={{ width:"100%" }} value={form.trabajador} onChange={e => setForm({...form, trabajador:e.target.value})}>
+                {TRABAJADORES.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
+              <div><label>Entrada</label><input className="input" type="time" value={form.entrada} onChange={e => setForm({...form, entrada:e.target.value})} /></div>
+            </div>
+            <div><label>Salida (opcional)</label><input className="input" type="time" value={form.salida} onChange={e => setForm({...form, salida:e.target.value})} /></div>
+            <div><label>Notas</label><input className="input" placeholder="Trabajo realizado..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:4 }}>
+              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardar}>Guardar</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function Encargos({ encargos, setEncargos }) {
+  const [modal, setModal] = useState(false);
+  const [filtro, setFiltro] = useState("Todos");
+  const [form, setForm] = useState({ titulo:"", cliente:"", asignado:TRABAJADORES[0], prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
+
+  const guardar = () => {
+    setEncargos(prev => [...prev, { ...form, id:Date.now() }]);
+    setModal(false);
+    setForm({ titulo:"", cliente:"", asignado:TRABAJADORES[0], prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
+  };
+
+  const lista = filtro === "Todos" ? encargos : encargos.filter(e => e.estado === filtro);
+
+  return (
+    <div>
+      <Header title="Encargos" onAdd={() => setModal(true)} addLabel="+ Nuevo encargo" />
+      <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+        {["Todos", ...ESTADOS_ENCARGO].map(f => (
+          <button key={f} className="btn" onClick={() => setFiltro(f)}
+            style={{ background: filtro===f ? COLORS.accent : COLORS.surface, color: filtro===f ? "#000" : COLORS.muted, border:`1px solid ${filtro===f ? COLORS.accent : COLORS.border}`, fontSize:12 }}>
+            {f}
+          </button>
+        ))}
+      </div>
+      <div style={{ display:"grid", gap:12 }}>
+        {lista.map(e => (
+          <div key={e.id} className="card" style={{ padding:18, display:"grid", gridTemplateColumns:"1fr auto", gap:12 }}>
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+                <EstadoBadge estado={e.prioridad} />
+                <EstadoBadge estado={e.estado} />
+              </div>
+              <div style={{ fontSize:15, fontWeight:600, marginBottom:4 }}>{e.titulo}</div>
+              <div style={{ fontSize:12, color:COLORS.muted }}>Cliente: {e.cliente} · Asignado: {e.asignado} · Fecha: {e.fecha}</div>
+              {e.notas && <div style={{ fontSize:12, color:COLORS.muted, marginTop:6, fontStyle:"italic" }}>"{e.notas}"</div>}
+            </div>
+            <div>
+              <select className="select" style={{ fontSize:12, padding:"5px 8px" }} value={e.estado}
+                onChange={ev => setEncargos(prev => prev.map(x => x.id===e.id ? {...x, estado:ev.target.value} : x))}>
+                {ESTADOS_ENCARGO.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+        ))}
+      </div>
+      {modal && (
+        <Modal title="Nuevo Encargo" onClose={() => setModal(false)}>
+          <div style={{ display:"grid", gap:14 }}>
+            <div><label>Título del encargo</label><input className="input" placeholder="Ej: Instalación split - Cliente X" value={form.titulo} onChange={e => setForm({...form, titulo:e.target.value})} /></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label>Cliente</label><input className="input" placeholder="Nombre cliente" value={form.cliente} onChange={e => setForm({...form, cliente:e.target.value})} /></div>
+              <div><label>Fecha prevista</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+              <div><label>Asignado</label>
+                <select className="select" style={{ width:"100%" }} value={form.asignado} onChange={e => setForm({...form, asignado:e.target.value})}>
+                  {TRABAJADORES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div><label>Prioridad</label>
+                <select className="select" style={{ width:"100%" }} value={form.prioridad} onChange={e => setForm({...form, prioridad:e.target.value})}>
+                  {["Baja","Media","Alta","Urgente"].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div><label>Estado</label>
+                <select className="select" style={{ width:"100%" }} value={form.estado} onChange={e => setForm({...form, estado:e.target.value})}>
+                  {ESTADOS_ENCARGO.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div><label>Notas</label><input className="input" placeholder="Observaciones, acceso, materiales..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardar}>Crear encargo</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function Albaranes({ albaranes, setAlbaranes }) {
+  const [modal, setModal] = useState(false);
+  const [filtro, setFiltro] = useState("Todos");
+  const [form, setForm] = useState({ numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" });
+
+  const guardar = () => {
+    const nextNum = `ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`;
+    setAlbaranes(prev => [...prev, { ...form, importe:Number(form.importe), numero:form.numero||nextNum, id:Date.now() }]);
+    setModal(false);
+    setForm({ numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" });
+  };
+
+  const lista = filtro === "Todos" ? albaranes : albaranes.filter(a => a.estado === filtro);
+  const total = lista.reduce((s,a) => s+a.importe, 0);
+
+  return (
+    <div>
+      <Header title="Albaranes" onAdd={() => setModal(true)} addLabel="+ Nuevo albarán" />
+      <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+        {["Todos", ...ESTADOS_ALBARAN].map(f => (
+          <button key={f} className="btn" onClick={() => setFiltro(f)}
+            style={{ background: filtro===f ? COLORS.accent : COLORS.surface, color: filtro===f ? "#000" : COLORS.muted, border:`1px solid ${filtro===f ? COLORS.accent : COLORS.border}`, fontSize:12 }}>
+            {f}
+          </button>
+        ))}
+        <span style={{ marginLeft:"auto", alignSelf:"center", fontSize:14, fontFamily:"Rajdhani", fontWeight:700, color:COLORS.green }}>
+          Total: {total.toLocaleString()}€
+        </span>
+      </div>
+      <div className="card" style={{ overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+              {["Número","Cliente","Descripción","Fecha","Importe","Estado"].map(h => (
+                <th key={h} style={{ padding:"12px 16px", textAlign:"left", fontSize:11, color:COLORS.muted, fontWeight:600, letterSpacing:".5px", textTransform:"uppercase" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map(a => (
+              <tr key={a.id} style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+                <td style={{ padding:"12px 16px", fontSize:13, fontFamily:"Rajdhani", fontWeight:600, color:COLORS.accent }}>{a.numero}</td>
+                <td style={{ padding:"12px 16px", fontSize:13, fontWeight:500 }}>{a.cliente}</td>
+                <td style={{ padding:"12px 16px", fontSize:12, color:COLORS.muted, maxWidth:200 }}>{a.descripcion}</td>
+                <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.muted }}>{a.fecha}</td>
+                <td style={{ padding:"12px 16px", fontSize:14, fontFamily:"Rajdhani", fontWeight:700, color:COLORS.green }}>{a.importe.toLocaleString()}€</td>
+                <td style={{ padding:"12px 16px" }}>
+                  <select className="select" style={{ fontSize:12, padding:"4px 8px" }} value={a.estado}
+                    onChange={ev => setAlbaranes(prev => prev.map(x => x.id===a.id ? {...x, estado:ev.target.value} : x))}>
+                    {ESTADOS_ALBARAN.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <Modal title="Nuevo Albarán" onClose={() => setModal(false)}>
+          <div style={{ display:"grid", gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label>Nº Albarán (auto si vacío)</label><input className="input" placeholder="ALB-2026-XXX" value={form.numero} onChange={e => setForm({...form, numero:e.target.value})} /></div>
+              <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
+            </div>
+            <div><label>Cliente</label><input className="input" placeholder="Nombre o empresa" value={form.cliente} onChange={e => setForm({...form, cliente:e.target.value})} /></div>
+            <div><label>Descripción del trabajo</label><input className="input" placeholder="Trabajos realizados..." value={form.descripcion} onChange={e => setForm({...form, descripcion:e.target.value})} /></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label>Importe (€)</label><input className="input" type="number" placeholder="0.00" value={form.importe} onChange={e => setForm({...form, importe:e.target.value})} /></div>
+              <div><label>Estado</label>
+                <select className="select" style={{ width:"100%" }} value={form.estado} onChange={e => setForm({...form, estado:e.target.value})}>
+                  {ESTADOS_ALBARAN.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardar}>Crear albarán</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── MANUALES con Firebase ────────────────────────────────────────────────────
+function Manuales({ onManualesChange }) {
+  const [manuales, setManuales] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [modal, setModal] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [buscar, setBuscar] = useState("");
+  const [form, setForm] = useState({ titulo:"", marca:"", tipo:"Instalación", url:"", fecha:new Date().toISOString().split("T")[0] });
+
+  useEffect(() => {
+    const q = query(collection(db, "manuales"), orderBy("fecha", "desc"));
+    const unsub = onSnapshot(q, snap => {
+      const datos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setManuales(datos);
+      onManualesChange(datos);
+      setCargando(false);
+    });
+    return unsub;
+  }, []);
+
+  const guardar = async () => {
+    if (!form.titulo || !form.marca) return;
+    setGuardando(true);
+    await addDoc(collection(db, "manuales"), form);
+    setGuardando(false);
+    setModal(false);
+    setForm({ titulo:"", marca:"", tipo:"Instalación", url:"", fecha:new Date().toISOString().split("T")[0] });
+  };
+
+  const lista = manuales.filter(m =>
+    m.titulo.toLowerCase().includes(buscar.toLowerCase()) ||
+    m.marca.toLowerCase().includes(buscar.toLowerCase())
+  );
+
+  const tipoColor = { Instalación:COLORS.accent, Mantenimiento:COLORS.green, Técnico:COLORS.warm, Protocolo:COLORS.yellow };
+
+  return (
+    <div>
+      <Header title="Biblioteca de Manuales ☁" onAdd={() => setModal(true)} addLabel="+ Añadir manual" />
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+        <input className="input" placeholder="🔍  Buscar por título o marca..." value={buscar} onChange={e => setBuscar(e.target.value)} style={{ maxWidth:400 }} />
+        <span style={{ fontSize:12, color:COLORS.green }}>✓ Sincronizado con la nube</span>
+      </div>
+
+      {cargando ? (
+        <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Cargando manuales...</div>
+      ) : lista.length === 0 ? (
+        <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>
+          {buscar ? "No se encontraron resultados" : "Aún no hay manuales. ¡Añade el primero!"}
+        </div>
+      ) : (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+          {lista.map(m => (
+            <div key={m.id} className="card" style={{ padding:18, borderTop:`3px solid ${tipoColor[m.tipo]||COLORS.muted}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <span className="badge" style={{ background:`${tipoColor[m.tipo]}22`, color:tipoColor[m.tipo]||COLORS.muted }}>{m.tipo}</span>
+                <span style={{ fontSize:11, color:COLORS.muted }}>{m.fecha}</span>
+              </div>
+              <div style={{ fontSize:14, fontWeight:600, marginBottom:6, lineHeight:1.4 }}>{m.titulo}</div>
+              <div style={{ fontSize:12, color:COLORS.muted, marginBottom:12 }}>Marca: {m.marca}</div>
+              {m.url && m.url !== "#" && (
+                <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6, display:"inline-block" }}>
+                  📥 Ver manual
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal && (
+        <Modal title="Añadir Manual" onClose={() => setModal(false)}>
+          <div style={{ display:"grid", gap:14 }}>
+            <div><label>Título del manual *</label><input className="input" placeholder="Ej: Manual instalación Daikin..." value={form.titulo} onChange={e => setForm({...form, titulo:e.target.value})} /></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label>Marca *</label><input className="input" placeholder="Daikin, Mitsubishi..." value={form.marca} onChange={e => setForm({...form, marca:e.target.value})} /></div>
+              <div><label>Tipo</label>
+                <select className="select" style={{ width:"100%" }} value={form.tipo} onChange={e => setForm({...form, tipo:e.target.value})}>
+                  {["Instalación","Mantenimiento","Técnico","Protocolo","Otro"].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div><label>URL del manual (opcional)</label><input className="input" placeholder="https://..." value={form.url} onChange={e => setForm({...form, url:e.target.value})} /></div>
+            <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+                {guardando ? "Guardando..." : "Guardar en nube ☁"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── APP ─────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [section, setSection] = useState("dashboard");
+  const [data, setData] = useState(initialData);
+  const [manuales, setManuales] = useState([]);
+
+  const setFichajes = fn => setData(d => ({ ...d, fichajes: fn(d.fichajes) }));
+  const setAlbaranes = fn => setData(d => ({ ...d, albaranes: fn(d.albaranes) }));
+  const setEncargos = fn => setData(d => ({ ...d, encargos: fn(d.encargos) }));
+
+  return (
+    <>
+      <style>{STYLE}</style>
+      <div style={{ display:"flex", minHeight:"100vh" }}>
+        <div style={{ width:220, background:COLORS.surface, borderRight:`1px solid ${COLORS.border}`, padding:"24px 0", display:"flex", flexDirection:"column", flexShrink:0 }}>
+          <div style={{ padding:"0 20px 28px", borderBottom:`1px solid ${COLORS.border}` }}>
+            <div style={{ fontFamily:"Rajdhani", fontSize:20, fontWeight:700, color:COLORS.accent, letterSpacing:1 }}>❄ ClimaPro</div>
+            <div style={{ fontSize:11, color:COLORS.muted, marginTop:3 }}>Gestión de empresa</div>
+          </div>
+          <nav style={{ padding:"16px 0", flex:1 }}>
+            {NAV_ITEMS.map(item => (
+              <button key={item.id} onClick={() => setSection(item.id)}
+                style={{ width:"100%", background: section===item.id ? COLORS.accentGlow : "transparent",
+                  borderLeft: section===item.id ? `3px solid ${COLORS.accent}` : "3px solid transparent",
+                  color: section===item.id ? COLORS.accent : COLORS.muted,
+                  padding:"12px 20px", textAlign:"left", cursor:"pointer", border:"none",
+                  fontSize:13, fontFamily:"Inter", fontWeight: section===item.id ? 600:400,
+                  display:"flex", alignItems:"center", gap:10, transition:"all .15s" }}>
+                <span>{item.icon}</span>{item.label}
+              </button>
+            ))}
+          </nav>
+          <div style={{ padding:"16px 20px", borderTop:`1px solid ${COLORS.border}`, fontSize:11, color:COLORS.muted }}>
+            {new Date().toLocaleDateString("es-ES", { weekday:"long", day:"numeric", month:"short" })}
+          </div>
+        </div>
+
+        <div style={{ flex:1, padding:32, overflowY:"auto", maxHeight:"100vh" }}>
+          {section === "dashboard" && <Dashboard data={data} manuales={manuales} />}
+          {section === "fichajes" && <Fichajes fichajes={data.fichajes} setFichajes={setFichajes} />}
+          {section === "encargos" && <Encargos encargos={data.encargos} setEncargos={setEncargos} />}
+          {section === "albaranes" && <Albaranes albaranes={data.albaranes} setAlbaranes={setAlbaranes} />}
+          {section === "manuales" && <Manuales onManualesChange={setManuales} />}
+        </div>
+      </div>
+    </>
+  );
+}
