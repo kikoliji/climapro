@@ -45,7 +45,6 @@ const STYLE = `
   tr:hover td { background:rgba(255,255,255,0.02); }
 `;
 
-const TRABAJADORES = ["Carlos M.", "Ana R.", "Pedro S.", "Laura T.", "Miguel F.", "José A."];
 const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
 const ESTADOS_ENCARGO = ["Pendiente", "En curso", "Completado", "Cancelado"];
 
@@ -56,9 +55,9 @@ const initialData = {
     { id: 3, numero: "ALB-2026-003", cliente: "Residencial Las Palmas", fecha: "2026-04-09", importe: 760, estado: "Borrador", descripcion: "Sustitución unidad exterior" },
   ],
   encargos: [
-    { id: 1, titulo: "Instalación split 3x1 - Clínica Salud", cliente: "Clínica Salud", asignado: "Carlos M.", prioridad: "Alta", estado: "En curso", fecha: "2026-04-10", notas: "Acceso por planta 2" },
-    { id: 2, titulo: "Revisión anual - Hotel Mar Azul", cliente: "Hotel Mar Azul", asignado: "Ana R.", prioridad: "Media", estado: "Pendiente", fecha: "2026-04-15", notas: "" },
-    { id: 3, titulo: "Reparación avería - Supermercado Norte", cliente: "Supermercado Norte", asignado: "Pedro S.", prioridad: "Urgente", estado: "Completado", fecha: "2026-04-08", notas: "Compresor sustituido" },
+    { id: 1, titulo: "Instalación split 3x1 - Clínica Salud", cliente: "Clínica Salud", asignado: "", prioridad: "Alta", estado: "En curso", fecha: "2026-04-10", notas: "Acceso por planta 2" },
+    { id: 2, titulo: "Revisión anual - Hotel Mar Azul", cliente: "Hotel Mar Azul", asignado: "", prioridad: "Media", estado: "Pendiente", fecha: "2026-04-15", notas: "" },
+    { id: 3, titulo: "Reparación avería - Supermercado Norte", cliente: "Supermercado Norte", asignado: "", prioridad: "Urgente", estado: "Completado", fecha: "2026-04-08", notas: "Compresor sustituido" },
   ],
 };
 
@@ -73,6 +72,7 @@ function calcHoras(entrada, salida) {
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "⬛" },
+  { id: "trabajadores", label: "Trabajadores", icon: "👷" },
   { id: "fichajes", label: "Control Horario", icon: "⏱" },
   { id: "encargos", label: "Encargos", icon: "🔧" },
   { id: "albaranes", label: "Albaranes", icon: "📄" },
@@ -106,87 +106,171 @@ function EstadoBadge({ estado }) {
     Alta: { bg:"rgba(255,107,53,.2)", color:COLORS.warm },
     Media: { bg:"rgba(255,214,0,.15)", color:COLORS.yellow },
     Baja: { bg:"rgba(139,143,168,.15)", color:COLORS.muted },
+    Activo: { bg:"rgba(0,230,118,.15)", color:COLORS.green },
+    Inactivo: { bg:"rgba(139,143,168,.15)", color:COLORS.muted },
   };
   const c = colors[estado] || { bg:"rgba(139,143,168,.15)", color:COLORS.muted };
-  return <span className="badge" style={{ background:c.bg, color:c.color, marginTop:3 }}>{estado}</span>;
+  return <span className="badge" style={{ background:c.bg, color:c.color }}>{estado}</span>;
 }
 
-function Header({ title, onAdd, addLabel, extra }) {
+function Header({ title, onAdd, addLabel }) {
   return (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
       <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>{title}</h2>
-      <div style={{ display:"flex", gap:8 }}>
-        {extra}
-        {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
-      </div>
+      {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
     </div>
   );
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
-function Dashboard({ data, manuales, fichajes }) {
-  const hoy = new Date().toISOString().split("T")[0];
-  const fichajesHoy = fichajes.filter(f => f.fecha === hoy).length;
-  const encargosActivos = data.encargos.filter(e => e.estado === "En curso" || e.estado === "Pendiente").length;
-  const albaranesPendientes = data.albaranes.filter(a => a.estado !== "Cobrado").length;
-  const totalFacturado = data.albaranes.filter(a => a.estado === "Cobrado").reduce((s, a) => s + a.importe, 0);
+// ─── TRABAJADORES ────────────────────────────────────────────────────────────
+function Trabajadores({ trabajadores, cargandoT }) {
+  const [modal, setModal] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [form, setForm] = useState({ nombre:"", telefono:"", email:"", cargo:"Técnico", estado:"Activo", notas:"" });
 
-  const stats = [
-    { label: "Fichajes hoy", value: fichajesHoy, color: COLORS.accent, icon: "⏱" },
-    { label: "Encargos activos", value: encargosActivos, color: COLORS.warm, icon: "🔧" },
-    { label: "Albaranes pendientes", value: albaranesPendientes, color: COLORS.yellow, icon: "📄" },
-    { label: "Facturado (cobrado)", value: `${totalFacturado.toLocaleString()}€`, color: COLORS.green, icon: "💶" },
-  ];
+  const abrirNuevo = () => {
+    setEditando(null);
+    setForm({ nombre:"", telefono:"", email:"", cargo:"Técnico", estado:"Activo", notas:"" });
+    setModal(true);
+  };
 
-  const urgentes = data.encargos.filter(e => e.prioridad === "Urgente" && e.estado !== "Completado");
-  const fichajesHoyList = fichajes.filter(f => f.fecha === hoy).slice(0, 4);
+  const abrirEditar = (t) => {
+    setEditando(t);
+    setForm({ nombre:t.nombre, telefono:t.telefono||"", email:t.email||"", cargo:t.cargo||"Técnico", estado:t.estado||"Activo", notas:t.notas||"" });
+    setModal(true);
+  };
+
+  const guardar = async () => {
+    if (!form.nombre) return;
+    setGuardando(true);
+    if (editando) {
+      await updateDoc(doc(db, "trabajadores", editando.id), form);
+    } else {
+      await addDoc(collection(db, "trabajadores"), form);
+    }
+    setGuardando(false);
+    setModal(false);
+  };
+
+  const eliminar = async (id) => {
+    await deleteDoc(doc(db, "trabajadores", id));
+    setConfirmarEliminar(null);
+  };
+
+  const activos = trabajadores.filter(t => t.estado !== "Inactivo");
+  const inactivos = trabajadores.filter(t => t.estado === "Inactivo");
 
   return (
     <div>
-      <div style={{ fontFamily:"Rajdhani", fontSize:28, fontWeight:700, marginBottom:24 }}>
-        Panel de Control <span style={{ color:COLORS.accent }}>ClimaPro</span>
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:16, marginBottom:28 }}>
-        {stats.map(s => (
-          <div key={s.label} className="card" style={{ padding:20, borderLeft:`3px solid ${s.color}` }}>
-            <div style={{ fontSize:24, marginBottom:8 }}>{s.icon}</div>
-            <div style={{ fontSize:28, fontWeight:700, fontFamily:"Rajdhani", color:s.color }}>{s.value}</div>
-            <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{s.label}</div>
+      <Header title="Trabajadores ☁" onAdd={abrirNuevo} addLabel="+ Añadir trabajador" />
+
+      {cargandoT ? (
+        <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Cargando trabajadores...</div>
+      ) : trabajadores.length === 0 ? (
+        <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Aún no hay trabajadores. ¡Añade el primero!</div>
+      ) : (
+        <>
+          {/* Activos */}
+          <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>
+            Activos ({activos.length})
           </div>
-        ))}
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-        <div className="card" style={{ padding:20 }}>
-          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Fichajes de hoy</div>
-          {fichajesHoyList.length === 0
-            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin fichajes hoy</div>
-            : fichajesHoyList.map(f => (
-              <div key={f.id} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between" }}>
-                <div style={{ fontSize:13, fontWeight:500 }}>{f.trabajador}</div>
-                <div style={{ fontSize:12, color:COLORS.muted }}>{f.entrada} → {f.salida || "..."} <span style={{ color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</span></div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14, marginBottom:28 }}>
+            {activos.map(t => (
+              <div key={t.id} className="card" style={{ padding:20, borderLeft:`3px solid ${COLORS.accent}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+                  <div>
+                    <div style={{ fontSize:32, marginBottom:4 }}>👷</div>
+                    <div style={{ fontWeight:700, fontSize:15 }}>{t.nombre}</div>
+                    <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>{t.cargo}</div>
+                  </div>
+                  <EstadoBadge estado={t.estado || "Activo"} />
+                </div>
+                {t.telefono && <div style={{ fontSize:12, color:COLORS.muted, marginBottom:4 }}>📱 {t.telefono}</div>}
+                {t.email && <div style={{ fontSize:12, color:COLORS.muted, marginBottom:4 }}>✉ {t.email}</div>}
+                {t.notas && <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginBottom:8 }}>"{t.notas}"</div>}
+                <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                  <button className="btn btn-ghost" style={{ fontSize:12, padding:"5px 12px" }} onClick={() => abrirEditar(t)}>✏ Editar</button>
+                  <button className="btn btn-danger" onClick={() => setConfirmarEliminar(t)}>🗑</button>
+                </div>
               </div>
-            ))
-          }
-        </div>
-        <div className="card" style={{ padding:20 }}>
-          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>⚠ Encargos Urgentes</div>
-          {urgentes.length === 0
-            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos urgentes pendientes</div>
-            : urgentes.map(e => (
-              <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
-                <div style={{ fontSize:13, fontWeight:500 }}>{e.titulo}</div>
-                <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>{e.asignado} · {e.fecha}</div>
+            ))}
+          </div>
+
+          {/* Inactivos */}
+          {inactivos.length > 0 && (
+            <>
+              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>
+                Inactivos ({inactivos.length})
               </div>
-            ))
-          }
-        </div>
-      </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14 }}>
+                {inactivos.map(t => (
+                  <div key={t.id} className="card" style={{ padding:20, opacity:0.6 }}>
+                    <div style={{ fontWeight:700, fontSize:15, marginBottom:4 }}>{t.nombre}</div>
+                    <div style={{ fontSize:12, color:COLORS.muted }}>{t.cargo}</div>
+                    <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"5px 12px" }} onClick={() => abrirEditar(t)}>✏ Editar</button>
+                      <button className="btn btn-danger" onClick={() => setConfirmarEliminar(t)}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Modal añadir/editar */}
+      {modal && (
+        <Modal title={editando ? "Editar Trabajador" : "Nuevo Trabajador"} onClose={() => setModal(false)}>
+          <div style={{ display:"grid", gap:14 }}>
+            <div><label>Nombre completo *</label><input className="input" placeholder="Nombre y apellido" value={form.nombre} onChange={e => setForm({...form, nombre:e.target.value})} /></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label>Cargo</label>
+                <select className="select" style={{ width:"100%" }} value={form.cargo} onChange={e => setForm({...form, cargo:e.target.value})}>
+                  {["Técnico","Oficial","Ayudante","Jefe de obra","Administrativo","Otro"].map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div><label>Estado</label>
+                <select className="select" style={{ width:"100%" }} value={form.estado} onChange={e => setForm({...form, estado:e.target.value})}>
+                  <option>Activo</option>
+                  <option>Inactivo</option>
+                </select>
+              </div>
+            </div>
+            <div><label>Teléfono</label><input className="input" placeholder="6XX XXX XXX" value={form.telefono} onChange={e => setForm({...form, telefono:e.target.value})} /></div>
+            <div><label>Email</label><input className="input" placeholder="correo@ejemplo.com" value={form.email} onChange={e => setForm({...form, email:e.target.value})} /></div>
+            <div><label>Notas</label><input className="input" placeholder="Observaciones..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+                {guardando ? "Guardando..." : editando ? "Guardar cambios" : "Añadir trabajador"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmarEliminar && (
+        <Modal title="¿Eliminar trabajador?" onClose={() => setConfirmarEliminar(null)}>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:14, marginBottom:8 }}>Vas a eliminar:</div>
+            <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.nombre}</div>
+            <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>Esta acción no se puede deshacer.</div>
+          </div>
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button className="btn btn-ghost" onClick={() => setConfirmarEliminar(null)}>Cancelar</button>
+            <button className="btn" style={{ background:COLORS.danger, color:"#fff" }} onClick={() => eliminar(confirmarEliminar.id)}>Sí, eliminar</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 // ─── FICHAJES con Firebase ────────────────────────────────────────────────────
-function Fichajes() {
+function Fichajes({ trabajadores }) {
   const [fichajes, setFichajes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
@@ -194,13 +278,20 @@ function Fichajes() {
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [filtroFecha, setFiltroFecha] = useState("");
   const [filtroTrabajador, setFiltroTrabajador] = useState("Todos");
+  const nombresActivos = trabajadores.filter(t => t.estado !== "Inactivo").map(t => t.nombre);
   const [form, setForm] = useState({
-    trabajador: TRABAJADORES[0],
+    trabajador: "",
     fecha: new Date().toISOString().split("T")[0],
     entrada: "08:00",
     salida: "",
     notas: ""
   });
+
+  useEffect(() => {
+    if (nombresActivos.length > 0 && !form.trabajador) {
+      setForm(f => ({ ...f, trabajador: nombresActivos[0] }));
+    }
+  }, [trabajadores]);
 
   useEffect(() => {
     const q = query(collection(db, "fichajes"), orderBy("fecha", "desc"));
@@ -217,7 +308,6 @@ function Fichajes() {
     await addDoc(collection(db, "fichajes"), form);
     setGuardando(false);
     setModal(false);
-    setForm({ trabajador: TRABAJADORES[0], fecha: new Date().toISOString().split("T")[0], entrada: "08:00", salida: "", notas: "" });
   };
 
   const eliminar = async (id) => {
@@ -245,24 +335,17 @@ function Fichajes() {
   return (
     <div>
       <Header title="Control Horario ☁" onAdd={() => setModal(true)} addLabel="+ Registrar fichaje" />
-
-      {/* Filtros */}
       <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
-        <div>
-          <select className="select" value={filtroTrabajador} onChange={e => setFiltroTrabajador(e.target.value)}>
-            <option value="Todos">Todos los trabajadores</option>
-            {TRABAJADORES.map(t => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <input className="input" type="date" style={{ width:"auto" }} value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} />
-        </div>
-        {filtroFecha && <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setFiltroFecha("")}>✕ Limpiar fecha</button>}
+        <select className="select" value={filtroTrabajador} onChange={e => setFiltroTrabajador(e.target.value)}>
+          <option value="Todos">Todos los trabajadores</option>
+          {nombresActivos.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <input className="input" type="date" style={{ width:"auto" }} value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} />
+        {filtroFecha && <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setFiltroFecha("")}>✕ Limpiar</button>}
         <span style={{ marginLeft:"auto", fontFamily:"Rajdhani", fontSize:14, fontWeight:700, color:COLORS.accent }}>
           Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m
         </span>
       </div>
-
       <div className="card" style={{ overflow:"hidden" }}>
         {cargando ? (
           <div style={{ padding:40, textAlign:"center", color:COLORS.muted }}>Cargando fichajes...</div>
@@ -305,7 +388,6 @@ function Fichajes() {
       {confirmarEliminar && (
         <Modal title="¿Eliminar fichaje?" onClose={() => setConfirmarEliminar(null)}>
           <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:14, marginBottom:8 }}>Vas a eliminar el fichaje de:</div>
             <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha}</div>
             <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>Esta acción no se puede deshacer.</div>
           </div>
@@ -321,7 +403,10 @@ function Fichajes() {
           <div style={{ display:"grid", gap:16 }}>
             <div><label>Trabajador</label>
               <select className="select" style={{ width:"100%" }} value={form.trabajador} onChange={e => setForm({...form, trabajador:e.target.value})}>
-                {TRABAJADORES.map(t => <option key={t}>{t}</option>)}
+                {nombresActivos.length === 0
+                  ? <option disabled>No hay trabajadores activos</option>
+                  : nombresActivos.map(t => <option key={t}>{t}</option>)
+                }
               </select>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -344,15 +429,16 @@ function Fichajes() {
 }
 
 // ─── ENCARGOS ────────────────────────────────────────────────────────────────
-function Encargos({ encargos, setEncargos }) {
+function Encargos({ encargos, setEncargos, trabajadores }) {
   const [modal, setModal] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
-  const [form, setForm] = useState({ titulo:"", cliente:"", asignado:TRABAJADORES[0], prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
+  const nombresActivos = trabajadores.filter(t => t.estado !== "Inactivo").map(t => t.nombre);
+  const [form, setForm] = useState({ titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
 
   const guardar = () => {
     setEncargos(prev => [...prev, { ...form, id:Date.now() }]);
     setModal(false);
-    setForm({ titulo:"", cliente:"", asignado:TRABAJADORES[0], prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
+    setForm({ titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
   };
 
   const lista = filtro === "Todos" ? encargos : encargos.filter(e => e.estado === filtro);
@@ -377,7 +463,7 @@ function Encargos({ encargos, setEncargos }) {
                 <EstadoBadge estado={e.estado} />
               </div>
               <div style={{ fontSize:15, fontWeight:600, marginBottom:4 }}>{e.titulo}</div>
-              <div style={{ fontSize:12, color:COLORS.muted }}>Cliente: {e.cliente} · Asignado: {e.asignado} · Fecha: {e.fecha}</div>
+              <div style={{ fontSize:12, color:COLORS.muted }}>Cliente: {e.cliente} · Asignado: {e.asignado || "—"} · Fecha: {e.fecha}</div>
               {e.notas && <div style={{ fontSize:12, color:COLORS.muted, marginTop:6, fontStyle:"italic" }}>"{e.notas}"</div>}
             </div>
             <div>
@@ -400,7 +486,8 @@ function Encargos({ encargos, setEncargos }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
               <div><label>Asignado</label>
                 <select className="select" style={{ width:"100%" }} value={form.asignado} onChange={e => setForm({...form, asignado:e.target.value})}>
-                  {TRABAJADORES.map(t => <option key={t}>{t}</option>)}
+                  <option value="">Sin asignar</option>
+                  {nombresActivos.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
               <div><label>Prioridad</label>
@@ -512,7 +599,7 @@ function Albaranes({ albaranes, setAlbaranes }) {
   );
 }
 
-// ─── MANUALES con Firebase + carpetas ────────────────────────────────────────
+// ─── MANUALES ────────────────────────────────────────────────────────────────
 function Manuales({ onManualesChange }) {
   const [manuales, setManuales] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -550,7 +637,6 @@ function Manuales({ onManualesChange }) {
   };
 
   const tipoColor = { Instalación:COLORS.accent, Mantenimiento:COLORS.green, Técnico:COLORS.warm, Protocolo:COLORS.yellow, Otro:COLORS.muted };
-
   const porMarca = {};
   const listaFiltrada = buscar
     ? manuales.filter(m => m.titulo.toLowerCase().includes(buscar.toLowerCase()) || m.marca.toLowerCase().includes(buscar.toLowerCase()))
@@ -561,7 +647,6 @@ function Manuales({ onManualesChange }) {
     if (!porMarca[m.marca][m.tipo]) porMarca[m.marca][m.tipo] = [];
     porMarca[m.marca][m.tipo].push(m);
   });
-
   const marcas = Object.keys(porMarca).sort();
 
   return (
@@ -573,13 +658,10 @@ function Manuales({ onManualesChange }) {
           style={{ maxWidth:400 }} />
         <span style={{ fontSize:12, color:COLORS.green }}>✓ Sincronizado con la nube</span>
       </div>
-
       {cargando ? (
         <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Cargando manuales...</div>
       ) : marcas.length === 0 ? (
-        <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>
-          {buscar ? "No se encontraron resultados" : "Aún no hay manuales. ¡Añade el primero!"}
-        </div>
+        <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>{buscar ? "No se encontraron resultados" : "Aún no hay manuales."}</div>
       ) : buscar ? (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
           {listaFiltrada.map(m => (
@@ -588,11 +670,9 @@ function Manuales({ onManualesChange }) {
                 <span className="badge" style={{ background:`${tipoColor[m.tipo]}22`, color:tipoColor[m.tipo]||COLORS.muted }}>{m.tipo}</span>
                 <span style={{ fontSize:11, color:COLORS.muted }}>{m.marca}</span>
               </div>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:12, lineHeight:1.4 }}>{m.titulo}</div>
+              <div style={{ fontSize:14, fontWeight:600, marginBottom:12 }}>{m.titulo}</div>
               <div style={{ display:"flex", gap:8 }}>
-                {m.url && m.url !== "#" && (
-                  <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6 }}>📥 Ver</a>
-                )}
+                {m.url && m.url !== "#" && <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"5px 12px", borderRadius:6 }}>📥 Ver</a>}
                 <button className="btn btn-danger" onClick={() => setConfirmarEliminar(m)}>🗑</button>
               </div>
             </div>
@@ -635,12 +715,7 @@ function Manuales({ onManualesChange }) {
                                     <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{m.fecha}</div>
                                   </div>
                                   <div style={{ display:"flex", gap:8 }}>
-                                    {m.url && m.url !== "#" && (
-                                      <a href={m.url} target="_blank" rel="noreferrer"
-                                        style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"4px 10px", borderRadius:6 }}>
-                                        📥 Ver
-                                      </a>
-                                    )}
+                                    {m.url && m.url !== "#" && <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", border:`1px solid ${COLORS.accent}33`, padding:"4px 10px", borderRadius:6 }}>📥 Ver</a>}
                                     <button className="btn btn-danger" onClick={() => setConfirmarEliminar(m)}>🗑</button>
                                   </div>
                                 </div>
@@ -657,11 +732,9 @@ function Manuales({ onManualesChange }) {
           })}
         </div>
       )}
-
       {confirmarEliminar && (
         <Modal title="¿Eliminar manual?" onClose={() => setConfirmarEliminar(null)}>
           <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:14, marginBottom:8 }}>Vas a eliminar:</div>
             <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.titulo}</div>
             <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>Esta acción no se puede deshacer.</div>
           </div>
@@ -671,7 +744,6 @@ function Manuales({ onManualesChange }) {
           </div>
         </Modal>
       )}
-
       {modal && (
         <Modal title="Añadir Manual" onClose={() => setModal(false)}>
           <div style={{ display:"grid", gap:14 }}>
@@ -688,13 +760,73 @@ function Manuales({ onManualesChange }) {
             <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
-                {guardando ? "Guardando..." : "Guardar en nube ☁"}
-              </button>
+              <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando ? "Guardando..." : "Guardar en nube ☁"}</button>
             </div>
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+function Dashboard({ data, manuales, fichajes, trabajadores }) {
+  const hoy = new Date().toISOString().split("T")[0];
+  const fichajesHoy = fichajes.filter(f => f.fecha === hoy).length;
+  const encargosActivos = data.encargos.filter(e => e.estado === "En curso" || e.estado === "Pendiente").length;
+  const albaranesPendientes = data.albaranes.filter(a => a.estado !== "Cobrado").length;
+  const totalFacturado = data.albaranes.filter(a => a.estado === "Cobrado").reduce((s, a) => s + a.importe, 0);
+
+  const stats = [
+    { label: "Trabajadores activos", value: trabajadores.filter(t => t.estado !== "Inactivo").length, color: COLORS.accent, icon: "👷" },
+    { label: "Fichajes hoy", value: fichajesHoy, color: COLORS.green, icon: "⏱" },
+    { label: "Encargos activos", value: encargosActivos, color: COLORS.warm, icon: "🔧" },
+    { label: "Facturado (cobrado)", value: `${totalFacturado.toLocaleString()}€`, color: COLORS.yellow, icon: "💶" },
+  ];
+
+  const urgentes = data.encargos.filter(e => e.prioridad === "Urgente" && e.estado !== "Completado");
+  const fichajesHoyList = fichajes.filter(f => f.fecha === hoy).slice(0, 4);
+
+  return (
+    <div>
+      <div style={{ fontFamily:"Rajdhani", fontSize:28, fontWeight:700, marginBottom:24 }}>
+        Panel de Control <span style={{ color:COLORS.accent }}>ClimaPro</span>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:16, marginBottom:28 }}>
+        {stats.map(s => (
+          <div key={s.label} className="card" style={{ padding:20, borderLeft:`3px solid ${s.color}` }}>
+            <div style={{ fontSize:24, marginBottom:8 }}>{s.icon}</div>
+            <div style={{ fontSize:28, fontWeight:700, fontFamily:"Rajdhani", color:s.color }}>{s.value}</div>
+            <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+        <div className="card" style={{ padding:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Fichajes de hoy</div>
+          {fichajesHoyList.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin fichajes hoy</div>
+            : fichajesHoyList.map(f => (
+              <div key={f.id} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between" }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{f.trabajador}</div>
+                <div style={{ fontSize:12, color:COLORS.muted }}>{f.entrada} → {f.salida || "..."} <span style={{ color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</span></div>
+              </div>
+            ))
+          }
+        </div>
+        <div className="card" style={{ padding:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>⚠ Encargos Urgentes</div>
+          {urgentes.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos urgentes pendientes</div>
+            : urgentes.map(e => (
+              <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{e.titulo}</div>
+                <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>{e.asignado || "Sin asignar"} · {e.fecha}</div>
+              </div>
+            ))
+          }
+        </div>
+      </div>
     </div>
   );
 }
@@ -705,17 +837,23 @@ export default function App() {
   const [data, setData] = useState(initialData);
   const [manuales, setManuales] = useState([]);
   const [fichajes, setFichajes] = useState([]);
+  const [trabajadores, setTrabajadores] = useState([]);
+  const [cargandoT, setCargandoT] = useState(true);
 
   const setAlbaranes = fn => setData(d => ({ ...d, albaranes: fn(d.albaranes) }));
   const setEncargos = fn => setData(d => ({ ...d, encargos: fn(d.encargos) }));
 
-  // Escuchar fichajes para el dashboard
   useEffect(() => {
     const q = query(collection(db, "fichajes"), orderBy("fecha", "desc"));
-    const unsub = onSnapshot(q, snap => {
-      setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    return onSnapshot(q, snap => setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, "trabajadores"), orderBy("nombre"));
+    return onSnapshot(q, snap => {
+      setTrabajadores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCargandoT(false);
     });
-    return unsub;
   }, []);
 
   return (
@@ -746,9 +884,10 @@ export default function App() {
         </div>
 
         <div style={{ flex:1, padding:32, overflowY:"auto", maxHeight:"100vh" }}>
-          {section === "dashboard" && <Dashboard data={data} manuales={manuales} fichajes={fichajes} />}
-          {section === "fichajes" && <Fichajes />}
-          {section === "encargos" && <Encargos encargos={data.encargos} setEncargos={setEncargos} />}
+          {section === "dashboard" && <Dashboard data={data} manuales={manuales} fichajes={fichajes} trabajadores={trabajadores} />}
+          {section === "trabajadores" && <Trabajadores trabajadores={trabajadores} cargandoT={cargandoT} />}
+          {section === "fichajes" && <Fichajes trabajadores={trabajadores} />}
+          {section === "encargos" && <Encargos encargos={data.encargos} setEncargos={setEncargos} trabajadores={trabajadores} />}
           {section === "albaranes" && <Albaranes albaranes={data.albaranes} setAlbaranes={setAlbaranes} />}
           {section === "manuales" && <Manuales onManualesChange={setManuales} />}
         </div>
