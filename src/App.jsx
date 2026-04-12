@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
-  collection, addDoc, onSnapshot, orderBy, query, deleteDoc, doc
+  collection, addDoc, onSnapshot, orderBy, query, deleteDoc, doc, updateDoc
 } from "firebase/firestore";
 
 const COLORS = {
@@ -42,6 +42,7 @@ const STYLE = `
   label { font-size:12px; color:${COLORS.muted}; font-weight:500; letter-spacing:.5px; text-transform:uppercase; display:block; margin-bottom:5px; }
   .folder-row { display:flex; align-items:center; gap:10; padding:12px 16px; cursor:pointer; border-radius:10px; transition:background .15s; }
   .folder-row:hover { background:rgba(0,196,255,0.07); }
+  tr:hover td { background:rgba(255,255,255,0.02); }
 `;
 
 const TRABAJADORES = ["Carlos M.", "Ana R.", "Pedro S.", "Laura T.", "Miguel F.", "José A."];
@@ -49,11 +50,6 @@ const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
 const ESTADOS_ENCARGO = ["Pendiente", "En curso", "Completado", "Cancelado"];
 
 const initialData = {
-  fichajes: [
-    { id: 1, trabajador: "Carlos M.", entrada: "08:00", salida: "17:00", fecha: "2026-04-09", notas: "Instalación split" },
-    { id: 2, trabajador: "Ana R.", entrada: "08:30", salida: "17:30", fecha: "2026-04-09", notas: "" },
-    { id: 3, trabajador: "Pedro S.", entrada: "07:45", salida: "16:45", fecha: "2026-04-08", notas: "Mantenimiento VRV" },
-  ],
   albaranes: [
     { id: 1, numero: "ALB-2026-001", cliente: "Hotel Sol & Mar", fecha: "2026-04-05", importe: 1840, estado: "Cobrado", descripcion: "Mantenimiento anual 4 unidades" },
     { id: 2, numero: "ALB-2026-002", cliente: "Oficinas Central SA", fecha: "2026-04-07", importe: 3200, estado: "Enviado", descripcion: "Instalación sistema VRV" },
@@ -71,6 +67,7 @@ function calcHoras(entrada, salida) {
   const [h1, m1] = entrada.split(":").map(Number);
   const [h2, m2] = salida.split(":").map(Number);
   const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (mins < 0) return "-";
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
@@ -114,18 +111,22 @@ function EstadoBadge({ estado }) {
   return <span className="badge" style={{ background:c.bg, color:c.color, marginTop:3 }}>{estado}</span>;
 }
 
-function Header({ title, onAdd, addLabel }) {
+function Header({ title, onAdd, addLabel, extra }) {
   return (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
       <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>{title}</h2>
-      {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
+      <div style={{ display:"flex", gap:8 }}>
+        {extra}
+        {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
+      </div>
     </div>
   );
 }
 
-function Dashboard({ data, manuales }) {
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+function Dashboard({ data, manuales, fichajes }) {
   const hoy = new Date().toISOString().split("T")[0];
-  const fichajesHoy = data.fichajes.filter(f => f.fecha === hoy).length;
+  const fichajesHoy = fichajes.filter(f => f.fecha === hoy).length;
   const encargosActivos = data.encargos.filter(e => e.estado === "En curso" || e.estado === "Pendiente").length;
   const albaranesPendientes = data.albaranes.filter(a => a.estado !== "Cobrado").length;
   const totalFacturado = data.albaranes.filter(a => a.estado === "Cobrado").reduce((s, a) => s + a.importe, 0);
@@ -138,6 +139,7 @@ function Dashboard({ data, manuales }) {
   ];
 
   const urgentes = data.encargos.filter(e => e.prioridad === "Urgente" && e.estado !== "Completado");
+  const fichajesHoyList = fichajes.filter(f => f.fecha === hoy).slice(0, 4);
 
   return (
     <div>
@@ -155,6 +157,18 @@ function Dashboard({ data, manuales }) {
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
         <div className="card" style={{ padding:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Fichajes de hoy</div>
+          {fichajesHoyList.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin fichajes hoy</div>
+            : fichajesHoyList.map(f => (
+              <div key={f.id} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between" }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{f.trabajador}</div>
+                <div style={{ fontSize:12, color:COLORS.muted }}>{f.entrada} → {f.salida || "..."} <span style={{ color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</span></div>
+              </div>
+            ))
+          }
+        </div>
+        <div className="card" style={{ padding:20 }}>
           <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>⚠ Encargos Urgentes</div>
           {urgentes.length === 0
             ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos urgentes pendientes</div>
@@ -166,58 +180,142 @@ function Dashboard({ data, manuales }) {
             ))
           }
         </div>
-        <div className="card" style={{ padding:20 }}>
-          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>
-            📚 Manuales en nube: <span style={{ color:COLORS.green }}>{manuales.length}</span>
-          </div>
-          {manuales.slice(0,3).map(m => (
-            <div key={m.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
-              <div style={{ fontSize:13, fontWeight:500 }}>{m.titulo}</div>
-              <div style={{ fontSize:12, color:COLORS.muted }}>{m.marca} · {m.tipo}</div>
-            </div>
-          ))}
-          {manuales.length === 0 && <div style={{ color:COLORS.muted, fontSize:13 }}>Aún no hay manuales guardados</div>}
-        </div>
       </div>
     </div>
   );
 }
 
-function Fichajes({ fichajes, setFichajes }) {
+// ─── FICHAJES con Firebase ────────────────────────────────────────────────────
+function Fichajes() {
+  const [fichajes, setFichajes] = useState([]);
+  const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ trabajador: TRABAJADORES[0], fecha: new Date().toISOString().split("T")[0], entrada: "08:00", salida: "", notas: "" });
+  const [guardando, setGuardando] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [filtroFecha, setFiltroFecha] = useState("");
+  const [filtroTrabajador, setFiltroTrabajador] = useState("Todos");
+  const [form, setForm] = useState({
+    trabajador: TRABAJADORES[0],
+    fecha: new Date().toISOString().split("T")[0],
+    entrada: "08:00",
+    salida: "",
+    notas: ""
+  });
 
-  const guardar = () => {
-    setFichajes(prev => [...prev, { ...form, id: Date.now() }]);
+  useEffect(() => {
+    const q = query(collection(db, "fichajes"), orderBy("fecha", "desc"));
+    const unsub = onSnapshot(q, snap => {
+      setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCargando(false);
+    });
+    return unsub;
+  }, []);
+
+  const guardar = async () => {
+    if (!form.trabajador || !form.fecha || !form.entrada) return;
+    setGuardando(true);
+    await addDoc(collection(db, "fichajes"), form);
+    setGuardando(false);
     setModal(false);
+    setForm({ trabajador: TRABAJADORES[0], fecha: new Date().toISOString().split("T")[0], entrada: "08:00", salida: "", notas: "" });
   };
+
+  const eliminar = async (id) => {
+    await deleteDoc(doc(db, "fichajes", id));
+    setConfirmarEliminar(null);
+  };
+
+  const registrarSalida = async (f) => {
+    const ahora = new Date();
+    const salida = `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
+    await updateDoc(doc(db, "fichajes", f.id), { salida });
+  };
+
+  const lista = fichajes
+    .filter(f => filtroTrabajador === "Todos" || f.trabajador === filtroTrabajador)
+    .filter(f => !filtroFecha || f.fecha === filtroFecha);
+
+  const horasTotal = lista.reduce((s, f) => {
+    if (!f.entrada || !f.salida) return s;
+    const [h1, m1] = f.entrada.split(":").map(Number);
+    const [h2, m2] = f.salida.split(":").map(Number);
+    return s + (h2 * 60 + m2) - (h1 * 60 + m1);
+  }, 0);
 
   return (
     <div>
-      <Header title="Control Horario" onAdd={() => setModal(true)} addLabel="+ Fichar" />
-      <div className="card" style={{ overflow:"hidden" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead>
-            <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
-              {["Trabajador","Fecha","Entrada","Salida","Horas","Notas"].map(h => (
-                <th key={h} style={{ padding:"12px 16px", textAlign:"left", fontSize:11, color:COLORS.muted, fontWeight:600, letterSpacing:".5px", textTransform:"uppercase" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {fichajes.map(f => (
-              <tr key={f.id} style={{ borderBottom:`1px solid ${COLORS.border}` }}>
-                <td style={{ padding:"12px 16px", fontSize:13, fontWeight:500 }}>{f.trabajador}</td>
-                <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.muted }}>{f.fecha}</td>
-                <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.green }}>{f.entrada}</td>
-                <td style={{ padding:"12px 16px", fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>{f.salida || "—"}</td>
-                <td style={{ padding:"12px 16px", fontSize:13, fontFamily:"Rajdhani", fontWeight:600, color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</td>
-                <td style={{ padding:"12px 16px", fontSize:12, color:COLORS.muted }}>{f.notas || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Header title="Control Horario ☁" onAdd={() => setModal(true)} addLabel="+ Registrar fichaje" />
+
+      {/* Filtros */}
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
+        <div>
+          <select className="select" value={filtroTrabajador} onChange={e => setFiltroTrabajador(e.target.value)}>
+            <option value="Todos">Todos los trabajadores</option>
+            {TRABAJADORES.map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <input className="input" type="date" style={{ width:"auto" }} value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} />
+        </div>
+        {filtroFecha && <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setFiltroFecha("")}>✕ Limpiar fecha</button>}
+        <span style={{ marginLeft:"auto", fontFamily:"Rajdhani", fontSize:14, fontWeight:700, color:COLORS.accent }}>
+          Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m
+        </span>
       </div>
+
+      <div className="card" style={{ overflow:"hidden" }}>
+        {cargando ? (
+          <div style={{ padding:40, textAlign:"center", color:COLORS.muted }}>Cargando fichajes...</div>
+        ) : lista.length === 0 ? (
+          <div style={{ padding:40, textAlign:"center", color:COLORS.muted }}>No hay fichajes con estos filtros</div>
+        ) : (
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+                {["Trabajador","Fecha","Entrada","Salida","Horas","Notas",""].map((h,i) => (
+                  <th key={i} style={{ padding:"12px 16px", textAlign:"left", fontSize:11, color:COLORS.muted, fontWeight:600, letterSpacing:".5px", textTransform:"uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map(f => (
+                <tr key={f.id} style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+                  <td style={{ padding:"12px 16px", fontSize:13, fontWeight:500 }}>{f.trabajador}</td>
+                  <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.muted }}>{f.fecha}</td>
+                  <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.green }}>{f.entrada}</td>
+                  <td style={{ padding:"12px 16px", fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>
+                    {f.salida || (
+                      <button className="btn btn-primary" style={{ fontSize:11, padding:"3px 10px" }} onClick={() => registrarSalida(f)}>
+                        Registrar salida
+                      </button>
+                    )}
+                  </td>
+                  <td style={{ padding:"12px 16px", fontSize:13, fontFamily:"Rajdhani", fontWeight:600, color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</td>
+                  <td style={{ padding:"12px 16px", fontSize:12, color:COLORS.muted }}>{f.notas || "—"}</td>
+                  <td style={{ padding:"12px 16px" }}>
+                    <button className="btn btn-danger" onClick={() => setConfirmarEliminar(f)}>🗑</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {confirmarEliminar && (
+        <Modal title="¿Eliminar fichaje?" onClose={() => setConfirmarEliminar(null)}>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:14, marginBottom:8 }}>Vas a eliminar el fichaje de:</div>
+            <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha}</div>
+            <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>Esta acción no se puede deshacer.</div>
+          </div>
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button className="btn btn-ghost" onClick={() => setConfirmarEliminar(null)}>Cancelar</button>
+            <button className="btn" style={{ background:COLORS.danger, color:"#fff" }} onClick={() => eliminar(confirmarEliminar.id)}>Sí, eliminar</button>
+          </div>
+        </Modal>
+      )}
+
       {modal && (
         <Modal title="Registrar Fichaje" onClose={() => setModal(false)}>
           <div style={{ display:"grid", gap:16 }}>
@@ -234,7 +332,9 @@ function Fichajes({ fichajes, setFichajes }) {
             <div><label>Notas</label><input className="input" placeholder="Trabajo realizado..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={guardar}>Guardar</button>
+              <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+                {guardando ? "Guardando..." : "Guardar en nube ☁"}
+              </button>
             </div>
           </div>
         </Modal>
@@ -243,6 +343,7 @@ function Fichajes({ fichajes, setFichajes }) {
   );
 }
 
+// ─── ENCARGOS ────────────────────────────────────────────────────────────────
 function Encargos({ encargos, setEncargos }) {
   const [modal, setModal] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
@@ -325,6 +426,7 @@ function Encargos({ encargos, setEncargos }) {
   );
 }
 
+// ─── ALBARANES ───────────────────────────────────────────────────────────────
 function Albaranes({ albaranes, setAlbaranes }) {
   const [modal, setModal] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
@@ -410,7 +512,7 @@ function Albaranes({ albaranes, setAlbaranes }) {
   );
 }
 
-// ─── MANUALES con carpetas por Marca > Tipo ───────────────────────────────────
+// ─── MANUALES con Firebase + carpetas ────────────────────────────────────────
 function Manuales({ onManualesChange }) {
   const [manuales, setManuales] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -449,7 +551,6 @@ function Manuales({ onManualesChange }) {
 
   const tipoColor = { Instalación:COLORS.accent, Mantenimiento:COLORS.green, Técnico:COLORS.warm, Protocolo:COLORS.yellow, Otro:COLORS.muted };
 
-  // Agrupar por marca > tipo
   const porMarca = {};
   const listaFiltrada = buscar
     ? manuales.filter(m => m.titulo.toLowerCase().includes(buscar.toLowerCase()) || m.marca.toLowerCase().includes(buscar.toLowerCase()))
@@ -480,7 +581,6 @@ function Manuales({ onManualesChange }) {
           {buscar ? "No se encontraron resultados" : "Aún no hay manuales. ¡Añade el primero!"}
         </div>
       ) : buscar ? (
-        // Vista plana cuando se busca
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
           {listaFiltrada.map(m => (
             <div key={m.id} className="card" style={{ padding:18, borderTop:`3px solid ${tipoColor[m.tipo]||COLORS.muted}` }}>
@@ -499,39 +599,32 @@ function Manuales({ onManualesChange }) {
           ))}
         </div>
       ) : (
-        // Vista de carpetas
         <div className="card" style={{ padding:8 }}>
           {marcas.map(marca => {
             const marcaOpen = marcaAbierta === marca;
             const tipos = Object.keys(porMarca[marca]).sort();
             const totalMarca = Object.values(porMarca[marca]).reduce((s, arr) => s + arr.length, 0);
-
             return (
               <div key={marca}>
-                {/* Carpeta MARCA */}
                 <div className="folder-row" onClick={() => { setMarcaAbierta(marcaOpen ? null : marca); setTipoAbierto(null); }}>
                   <span style={{ fontSize:18 }}>{marcaOpen ? "📂" : "📁"}</span>
                   <span style={{ fontWeight:600, fontSize:14, flex:1 }}>{marca}</span>
                   <span style={{ fontSize:12, color:COLORS.muted }}>{totalMarca} manual{totalMarca !== 1 ? "es" : ""}</span>
                   <span style={{ color:COLORS.muted, fontSize:12, marginLeft:8 }}>{marcaOpen ? "▲" : "▼"}</span>
                 </div>
-
                 {marcaOpen && (
                   <div style={{ paddingLeft:24 }}>
                     {tipos.map(tipo => {
                       const tipoOpen = tipoAbierto === `${marca}-${tipo}`;
                       const items = porMarca[marca][tipo];
-
                       return (
                         <div key={tipo}>
-                          {/* Subcarpeta TIPO */}
                           <div className="folder-row" onClick={() => setTipoAbierto(tipoOpen ? null : `${marca}-${tipo}`)}>
                             <span style={{ fontSize:16 }}>{tipoOpen ? "📂" : "📁"}</span>
                             <span style={{ fontSize:13, flex:1, color:tipoColor[tipo]||COLORS.muted }}>{tipo}</span>
                             <span style={{ fontSize:12, color:COLORS.muted }}>{items.length} manual{items.length !== 1 ? "es" : ""}</span>
                             <span style={{ color:COLORS.muted, fontSize:12, marginLeft:8 }}>{tipoOpen ? "▲" : "▼"}</span>
                           </div>
-
                           {tipoOpen && (
                             <div style={{ paddingLeft:24 }}>
                               {items.map(m => (
@@ -606,14 +699,24 @@ function Manuales({ onManualesChange }) {
   );
 }
 
+// ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [section, setSection] = useState("dashboard");
   const [data, setData] = useState(initialData);
   const [manuales, setManuales] = useState([]);
+  const [fichajes, setFichajes] = useState([]);
 
-  const setFichajes = fn => setData(d => ({ ...d, fichajes: fn(d.fichajes) }));
   const setAlbaranes = fn => setData(d => ({ ...d, albaranes: fn(d.albaranes) }));
   const setEncargos = fn => setData(d => ({ ...d, encargos: fn(d.encargos) }));
+
+  // Escuchar fichajes para el dashboard
+  useEffect(() => {
+    const q = query(collection(db, "fichajes"), orderBy("fecha", "desc"));
+    const unsub = onSnapshot(q, snap => {
+      setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
 
   return (
     <>
@@ -643,8 +746,8 @@ export default function App() {
         </div>
 
         <div style={{ flex:1, padding:32, overflowY:"auto", maxHeight:"100vh" }}>
-          {section === "dashboard" && <Dashboard data={data} manuales={manuales} />}
-          {section === "fichajes" && <Fichajes fichajes={data.fichajes} setFichajes={setFichajes} />}
+          {section === "dashboard" && <Dashboard data={data} manuales={manuales} fichajes={fichajes} />}
+          {section === "fichajes" && <Fichajes />}
           {section === "encargos" && <Encargos encargos={data.encargos} setEncargos={setEncargos} />}
           {section === "albaranes" && <Albaranes albaranes={data.albaranes} setAlbaranes={setAlbaranes} />}
           {section === "manuales" && <Manuales onManualesChange={setManuales} />}
