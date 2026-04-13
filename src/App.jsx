@@ -3,6 +3,8 @@ import { db } from "./firebase";
 import {
   collection, addDoc, onSnapshot, orderBy, query, deleteDoc, doc, updateDoc
 } from "firebase/firestore";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const COLORS = {
   bg: "#0f1117",
@@ -68,6 +70,120 @@ function calcHoras(entrada, salida) {
   const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
   if (mins < 0) return "-";
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function calcMinutos(entrada, salida) {
+  if (!entrada || !salida) return 0;
+  const [h1, m1] = entrada.split(":").map(Number);
+  const [h2, m2] = salida.split(":").map(Number);
+  const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+  return mins > 0 ? mins : 0;
+}
+
+// ─── GENERADOR DE PDF ─────────────────────────────────────────────────────────
+function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+  const ahora = new Date();
+  const hace4años = new Date();
+  hace4años.setFullYear(ahora.getFullYear() - 4);
+
+  // Filtrar fichajes del trabajador en los últimos 4 años
+  const registros = fichajes
+    .filter(f => f.trabajador === trabajador && new Date(f.fecha) >= hace4años)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  // ── Cabecera ──
+  pdf.setFillColor(15, 17, 23);
+  pdf.rect(0, 0, 210, 40, "F");
+  pdf.setTextColor(0, 196, 255);
+  pdf.setFontSize(20);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("REGISTRO DE JORNADA LABORAL", 105, 15, { align: "center" });
+  pdf.setTextColor(200, 200, 200);
+  pdf.setFontSize(11);
+  pdf.text(`Empresa: ${empresa}`, 105, 23, { align: "center" });
+  pdf.setTextColor(150, 150, 150);
+  pdf.setFontSize(9);
+  pdf.text("Art. 34.9 del Estatuto de los Trabajadores — RDL 8/2019", 105, 30, { align: "center" });
+
+  // ── Info trabajador ──
+  pdf.setTextColor(30, 30, 30);
+  pdf.setFontSize(11);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("DATOS DEL TRABAJADOR", 14, 50);
+  pdf.setDrawColor(0, 196, 255);
+  pdf.setLineWidth(0.5);
+  pdf.line(14, 52, 196, 52);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(10);
+  pdf.setTextColor(50, 50, 50);
+  pdf.text(`Nombre: ${trabajador}`, 14, 60);
+  pdf.text(`Período: ${hace4años.toLocaleDateString("es-ES")} — ${ahora.toLocaleDateString("es-ES")}`, 14, 67);
+  pdf.text(`Total registros: ${registros.length}`, 14, 74);
+
+  const totalMins = registros.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
+  const totalHoras = `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`;
+  pdf.text(`Total horas trabajadas: ${totalHoras}`, 120, 60);
+  pdf.text(`Generado: ${ahora.toLocaleDateString("es-ES")} ${ahora.toLocaleTimeString("es-ES")}`, 120, 67);
+
+  // ── Tabla de registros ──
+  pdf.setFontSize(11);
+  pdf.setFont("helvetica", "bold");
+  pdf.setTextColor(30, 30, 30);
+  pdf.text("REGISTROS DE JORNADA", 14, 85);
+  pdf.line(14, 87, 196, 87);
+
+  if (registros.length === 0) {
+    pdf.setFont("helvetica", "italic");
+    pdf.setFontSize(10);
+    pdf.setTextColor(150, 150, 150);
+    pdf.text("No hay registros en el período seleccionado.", 14, 97);
+  } else {
+    autoTable(pdf, {
+      startY: 92,
+      head: [["Fecha", "Día", "Entrada", "Salida", "Horas", "Notas"]],
+      body: registros.map(f => {
+        const fecha = new Date(f.fecha + "T00:00:00");
+        const dia = fecha.toLocaleDateString("es-ES", { weekday: "short" });
+        return [
+          f.fecha,
+          dia.charAt(0).toUpperCase() + dia.slice(1),
+          f.entrada || "—",
+          f.salida || "—",
+          calcHoras(f.entrada, f.salida),
+          f.notas || ""
+        ];
+      }),
+      headStyles: { fillColor: [15, 17, 23], textColor: [0, 196, 255], fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 18 },
+        2: { cellWidth: 22 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 22 },
+        5: { cellWidth: "auto" },
+      },
+      margin: { left: 14, right: 14 },
+    });
+  }
+
+  // ── Pie de página en cada página ──
+  const totalPaginas = pdf.getNumberOfPages();
+  for (let i = 1; i <= totalPaginas; i++) {
+    pdf.setPage(i);
+    pdf.setFontSize(8);
+    pdf.setTextColor(150, 150, 150);
+    pdf.text(`Página ${i} de ${totalPaginas}`, 105, 290, { align: "center" });
+    pdf.text("Documento generado por ClimaPro — Registro obligatorio según RDL 8/2019", 105, 295, { align: "center" });
+  }
+
+  // ── Descargar ──
+  const nombreArchivo = `registro_horario_${trabajador.replace(/\s/g, "_")}_${ahora.getFullYear()}.pdf`;
+  pdf.save(nombreArchivo);
 }
 
 const NAV_ITEMS = [
@@ -165,17 +281,13 @@ function Trabajadores({ trabajadores, cargandoT }) {
   return (
     <div>
       <Header title="Trabajadores ☁" onAdd={abrirNuevo} addLabel="+ Añadir trabajador" />
-
       {cargandoT ? (
         <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Cargando trabajadores...</div>
       ) : trabajadores.length === 0 ? (
         <div style={{ color:COLORS.muted, textAlign:"center", padding:40 }}>Aún no hay trabajadores. ¡Añade el primero!</div>
       ) : (
         <>
-          {/* Activos */}
-          <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>
-            Activos ({activos.length})
-          </div>
+          <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Activos ({activos.length})</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14, marginBottom:28 }}>
             {activos.map(t => (
               <div key={t.id} className="card" style={{ padding:20, borderLeft:`3px solid ${COLORS.accent}` }}>
@@ -197,13 +309,9 @@ function Trabajadores({ trabajadores, cargandoT }) {
               </div>
             ))}
           </div>
-
-          {/* Inactivos */}
           {inactivos.length > 0 && (
             <>
-              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>
-                Inactivos ({inactivos.length})
-              </div>
+              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Inactivos ({inactivos.length})</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14 }}>
                 {inactivos.map(t => (
                   <div key={t.id} className="card" style={{ padding:20, opacity:0.6 }}>
@@ -220,8 +328,6 @@ function Trabajadores({ trabajadores, cargandoT }) {
           )}
         </>
       )}
-
-      {/* Modal añadir/editar */}
       {modal && (
         <Modal title={editando ? "Editar Trabajador" : "Nuevo Trabajador"} onClose={() => setModal(false)}>
           <div style={{ display:"grid", gap:14 }}>
@@ -234,8 +340,7 @@ function Trabajadores({ trabajadores, cargandoT }) {
               </div>
               <div><label>Estado</label>
                 <select className="select" style={{ width:"100%" }} value={form.estado} onChange={e => setForm({...form, estado:e.target.value})}>
-                  <option>Activo</option>
-                  <option>Inactivo</option>
+                  <option>Activo</option><option>Inactivo</option>
                 </select>
               </div>
             </div>
@@ -251,11 +356,9 @@ function Trabajadores({ trabajadores, cargandoT }) {
           </div>
         </Modal>
       )}
-
       {confirmarEliminar && (
         <Modal title="¿Eliminar trabajador?" onClose={() => setConfirmarEliminar(null)}>
           <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:14, marginBottom:8 }}>Vas a eliminar:</div>
             <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.nombre}</div>
             <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>Esta acción no se puede deshacer.</div>
           </div>
@@ -269,22 +372,22 @@ function Trabajadores({ trabajadores, cargandoT }) {
   );
 }
 
-// ─── FICHAJES con Firebase ────────────────────────────────────────────────────
-function Fichajes({ trabajadores }) {
-  const [fichajes, setFichajes] = useState([]);
-  const [cargando, setCargando] = useState(true);
+// ─── FICHAJES con Firebase + PDF ──────────────────────────────────────────────
+function Fichajes({ trabajadores, fichajes, cargando }) {
   const [modal, setModal] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [filtroFecha, setFiltroFecha] = useState("");
   const [filtroTrabajador, setFiltroTrabajador] = useState("Todos");
+  const [modalPDF, setModalPDF] = useState(false);
+  const [trabajadorPDF, setTrabajadorPDF] = useState("");
   const nombresActivos = trabajadores.filter(t => t.estado !== "Inactivo").map(t => t.nombre);
+  const todosNombres = trabajadores.map(t => t.nombre);
+
   const [form, setForm] = useState({
-    trabajador: "",
+    trabajador: nombresActivos[0] || "",
     fecha: new Date().toISOString().split("T")[0],
-    entrada: "08:00",
-    salida: "",
-    notas: ""
+    entrada: "08:00", salida: "", notas: ""
   });
 
   useEffect(() => {
@@ -292,15 +395,6 @@ function Fichajes({ trabajadores }) {
       setForm(f => ({ ...f, trabajador: nombresActivos[0] }));
     }
   }, [trabajadores]);
-
-  useEffect(() => {
-    const q = query(collection(db, "fichajes"), orderBy("fecha", "desc"));
-    const unsub = onSnapshot(q, snap => {
-      setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setCargando(false);
-    });
-    return unsub;
-  }, []);
 
   const guardar = async () => {
     if (!form.trabajador || !form.fecha || !form.entrada) return;
@@ -325,16 +419,30 @@ function Fichajes({ trabajadores }) {
     .filter(f => filtroTrabajador === "Todos" || f.trabajador === filtroTrabajador)
     .filter(f => !filtroFecha || f.fecha === filtroFecha);
 
-  const horasTotal = lista.reduce((s, f) => {
-    if (!f.entrada || !f.salida) return s;
-    const [h1, m1] = f.entrada.split(":").map(Number);
-    const [h2, m2] = f.salida.split(":").map(Number);
-    return s + (h2 * 60 + m2) - (h1 * 60 + m1);
-  }, 0);
+  const horasTotal = lista.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
+
+  const abrirPDF = () => {
+    setTrabajadorPDF(todosNombres[0] || "");
+    setModalPDF(true);
+  };
+
+  const descargarPDF = () => {
+    if (!trabajadorPDF) return;
+    generarPDFHorario(trabajadorPDF, fichajes);
+    setModalPDF(false);
+  };
 
   return (
     <div>
-      <Header title="Control Horario ☁" onAdd={() => setModal(true)} addLabel="+ Registrar fichaje" />
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+        <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>Control Horario ☁</h2>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="btn btn-ghost" onClick={abrirPDF}>📄 Informe PDF 4 años</button>
+          <button className="btn btn-primary" onClick={() => setModal(true)}>+ Registrar fichaje</button>
+        </div>
+      </div>
+
+      {/* Filtros */}
       <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
         <select className="select" value={filtroTrabajador} onChange={e => setFiltroTrabajador(e.target.value)}>
           <option value="Todos">Todos los trabajadores</option>
@@ -346,6 +454,7 @@ function Fichajes({ trabajadores }) {
           Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m
         </span>
       </div>
+
       <div className="card" style={{ overflow:"hidden" }}>
         {cargando ? (
           <div style={{ padding:40, textAlign:"center", color:COLORS.muted }}>Cargando fichajes...</div>
@@ -367,23 +476,38 @@ function Fichajes({ trabajadores }) {
                   <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.muted }}>{f.fecha}</td>
                   <td style={{ padding:"12px 16px", fontSize:13, color:COLORS.green }}>{f.entrada}</td>
                   <td style={{ padding:"12px 16px", fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>
-                    {f.salida || (
-                      <button className="btn btn-primary" style={{ fontSize:11, padding:"3px 10px" }} onClick={() => registrarSalida(f)}>
-                        Registrar salida
-                      </button>
-                    )}
+                    {f.salida || <button className="btn btn-primary" style={{ fontSize:11, padding:"3px 10px" }} onClick={() => registrarSalida(f)}>Registrar salida</button>}
                   </td>
                   <td style={{ padding:"12px 16px", fontSize:13, fontFamily:"Rajdhani", fontWeight:600, color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</td>
                   <td style={{ padding:"12px 16px", fontSize:12, color:COLORS.muted }}>{f.notas || "—"}</td>
-                  <td style={{ padding:"12px 16px" }}>
-                    <button className="btn btn-danger" onClick={() => setConfirmarEliminar(f)}>🗑</button>
-                  </td>
+                  <td style={{ padding:"12px 16px" }}><button className="btn btn-danger" onClick={() => setConfirmarEliminar(f)}>🗑</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Modal PDF */}
+      {modalPDF && (
+        <Modal title="📄 Informe PDF — Últimos 4 años" onClose={() => setModalPDF(false)}>
+          <div style={{ display:"grid", gap:16 }}>
+            <div style={{ background:"rgba(0,196,255,0.08)", border:`1px solid ${COLORS.accent}33`, borderRadius:10, padding:14, fontSize:13, color:COLORS.muted }}>
+              Genera un PDF con todos los registros de jornada del trabajador durante los últimos 4 años, cumpliendo con el <strong style={{ color:COLORS.accent }}>RDL 8/2019</strong> sobre registro horario obligatorio.
+            </div>
+            <div>
+              <label>Selecciona el trabajador</label>
+              <select className="select" style={{ width:"100%" }} value={trabajadorPDF} onChange={e => setTrabajadorPDF(e.target.value)}>
+                {todosNombres.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setModalPDF(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={descargarPDF}>📥 Descargar PDF</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {confirmarEliminar && (
         <Modal title="¿Eliminar fichaje?" onClose={() => setConfirmarEliminar(null)}>
@@ -405,8 +529,7 @@ function Fichajes({ trabajadores }) {
               <select className="select" style={{ width:"100%" }} value={form.trabajador} onChange={e => setForm({...form, trabajador:e.target.value})}>
                 {nombresActivos.length === 0
                   ? <option disabled>No hay trabajadores activos</option>
-                  : nombresActivos.map(t => <option key={t}>{t}</option>)
-                }
+                  : nombresActivos.map(t => <option key={t}>{t}</option>)}
               </select>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -466,19 +589,17 @@ function Encargos({ encargos, setEncargos, trabajadores }) {
               <div style={{ fontSize:12, color:COLORS.muted }}>Cliente: {e.cliente} · Asignado: {e.asignado || "—"} · Fecha: {e.fecha}</div>
               {e.notas && <div style={{ fontSize:12, color:COLORS.muted, marginTop:6, fontStyle:"italic" }}>"{e.notas}"</div>}
             </div>
-            <div>
-              <select className="select" style={{ fontSize:12, padding:"5px 8px" }} value={e.estado}
-                onChange={ev => setEncargos(prev => prev.map(x => x.id===e.id ? {...x, estado:ev.target.value} : x))}>
-                {ESTADOS_ENCARGO.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
+            <select className="select" style={{ fontSize:12, padding:"5px 8px" }} value={e.estado}
+              onChange={ev => setEncargos(prev => prev.map(x => x.id===e.id ? {...x, estado:ev.target.value} : x))}>
+              {ESTADOS_ENCARGO.map(s => <option key={s}>{s}</option>)}
+            </select>
           </div>
         ))}
       </div>
       {modal && (
         <Modal title="Nuevo Encargo" onClose={() => setModal(false)}>
           <div style={{ display:"grid", gap:14 }}>
-            <div><label>Título del encargo</label><input className="input" placeholder="Ej: Instalación split - Cliente X" value={form.titulo} onChange={e => setForm({...form, titulo:e.target.value})} /></div>
+            <div><label>Título</label><input className="input" placeholder="Ej: Instalación split - Cliente X" value={form.titulo} onChange={e => setForm({...form, titulo:e.target.value})} /></div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div><label>Cliente</label><input className="input" placeholder="Nombre cliente" value={form.cliente} onChange={e => setForm({...form, cliente:e.target.value})} /></div>
               <div><label>Fecha prevista</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
@@ -501,7 +622,7 @@ function Encargos({ encargos, setEncargos, trabajadores }) {
                 </select>
               </div>
             </div>
-            <div><label>Notas</label><input className="input" placeholder="Observaciones, acceso, materiales..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
+            <div><label>Notas</label><input className="input" placeholder="Observaciones..." value={form.notas} onChange={e => setForm({...form, notas:e.target.value})} /></div>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardar}>Crear encargo</button>
@@ -579,7 +700,7 @@ function Albaranes({ albaranes, setAlbaranes }) {
               <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
             </div>
             <div><label>Cliente</label><input className="input" placeholder="Nombre o empresa" value={form.cliente} onChange={e => setForm({...form, cliente:e.target.value})} /></div>
-            <div><label>Descripción del trabajo</label><input className="input" placeholder="Trabajos realizados..." value={form.descripcion} onChange={e => setForm({...form, descripcion:e.target.value})} /></div>
+            <div><label>Descripción</label><input className="input" placeholder="Trabajos realizados..." value={form.descripcion} onChange={e => setForm({...form, descripcion:e.target.value})} /></div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div><label>Importe (€)</label><input className="input" type="number" placeholder="0.00" value={form.importe} onChange={e => setForm({...form, importe:e.target.value})} /></div>
               <div><label>Estado</label>
@@ -654,8 +775,7 @@ function Manuales({ onManualesChange }) {
       <Header title="Biblioteca de Manuales ☁" onAdd={() => setModal(true)} addLabel="+ Añadir manual" />
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
         <input className="input" placeholder="🔍  Buscar por título o marca..." value={buscar}
-          onChange={e => { setBuscar(e.target.value); setMarcaAbierta(null); setTipoAbierto(null); }}
-          style={{ maxWidth:400 }} />
+          onChange={e => { setBuscar(e.target.value); setMarcaAbierta(null); setTipoAbierto(null); }} style={{ maxWidth:400 }} />
         <span style={{ fontSize:12, color:COLORS.green }}>✓ Sincronizado con la nube</span>
       </div>
       {cargando ? (
@@ -747,7 +867,7 @@ function Manuales({ onManualesChange }) {
       {modal && (
         <Modal title="Añadir Manual" onClose={() => setModal(false)}>
           <div style={{ display:"grid", gap:14 }}>
-            <div><label>Título del manual *</label><input className="input" placeholder="Ej: Manual instalación Daikin..." value={form.titulo} onChange={e => setForm({...form, titulo:e.target.value})} /></div>
+            <div><label>Título *</label><input className="input" placeholder="Ej: Manual instalación Daikin..." value={form.titulo} onChange={e => setForm({...form, titulo:e.target.value})} /></div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div><label>Marca *</label><input className="input" placeholder="Daikin, Mitsubishi..." value={form.marca} onChange={e => setForm({...form, marca:e.target.value})} /></div>
               <div><label>Tipo</label>
@@ -756,7 +876,7 @@ function Manuales({ onManualesChange }) {
                 </select>
               </div>
             </div>
-            <div><label>URL del manual (opcional)</label><input className="input" placeholder="https://..." value={form.url} onChange={e => setForm({...form, url:e.target.value})} /></div>
+            <div><label>URL (opcional)</label><input className="input" placeholder="https://..." value={form.url} onChange={e => setForm({...form, url:e.target.value})} /></div>
             <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form, fecha:e.target.value})} /></div>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
@@ -774,7 +894,6 @@ function Dashboard({ data, manuales, fichajes, trabajadores }) {
   const hoy = new Date().toISOString().split("T")[0];
   const fichajesHoy = fichajes.filter(f => f.fecha === hoy).length;
   const encargosActivos = data.encargos.filter(e => e.estado === "En curso" || e.estado === "Pendiente").length;
-  const albaranesPendientes = data.albaranes.filter(a => a.estado !== "Cobrado").length;
   const totalFacturado = data.albaranes.filter(a => a.estado === "Cobrado").reduce((s, a) => s + a.importe, 0);
 
   const stats = [
@@ -817,7 +936,7 @@ function Dashboard({ data, manuales, fichajes, trabajadores }) {
         <div className="card" style={{ padding:20 }}>
           <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>⚠ Encargos Urgentes</div>
           {urgentes.length === 0
-            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos urgentes pendientes</div>
+            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos urgentes</div>
             : urgentes.map(e => (
               <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize:13, fontWeight:500 }}>{e.titulo}</div>
@@ -837,17 +956,23 @@ export default function App() {
   const [data, setData] = useState(initialData);
   const [manuales, setManuales] = useState([]);
   const [fichajes, setFichajes] = useState([]);
+  const [cargandoFichajes, setCargandoFichajes] = useState(true);
   const [trabajadores, setTrabajadores] = useState([]);
   const [cargandoT, setCargandoT] = useState(true);
 
   const setAlbaranes = fn => setData(d => ({ ...d, albaranes: fn(d.albaranes) }));
   const setEncargos = fn => setData(d => ({ ...d, encargos: fn(d.encargos) }));
 
+  // Escuchar fichajes en tiempo real desde Firebase
   useEffect(() => {
     const q = query(collection(db, "fichajes"), orderBy("fecha", "desc"));
-    return onSnapshot(q, snap => setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return onSnapshot(q, snap => {
+      setFichajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCargandoFichajes(false);
+    });
   }, []);
 
+  // Escuchar trabajadores en tiempo real desde Firebase
   useEffect(() => {
     const q = query(collection(db, "trabajadores"), orderBy("nombre"));
     return onSnapshot(q, snap => {
@@ -886,7 +1011,7 @@ export default function App() {
         <div style={{ flex:1, padding:32, overflowY:"auto", maxHeight:"100vh" }}>
           {section === "dashboard" && <Dashboard data={data} manuales={manuales} fichajes={fichajes} trabajadores={trabajadores} />}
           {section === "trabajadores" && <Trabajadores trabajadores={trabajadores} cargandoT={cargandoT} />}
-          {section === "fichajes" && <Fichajes trabajadores={trabajadores} />}
+          {section === "fichajes" && <Fichajes trabajadores={trabajadores} fichajes={fichajes} cargando={cargandoFichajes} />}
           {section === "encargos" && <Encargos encargos={data.encargos} setEncargos={setEncargos} trabajadores={trabajadores} />}
           {section === "albaranes" && <Albaranes albaranes={data.albaranes} setAlbaranes={setAlbaranes} />}
           {section === "manuales" && <Manuales onManualesChange={setManuales} />}
