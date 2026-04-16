@@ -343,11 +343,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           </div>
 
 )}
-{tramoAbierto && (
-  <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
-    {fichando ? "Registrando..." : "🔴 Salida"}
-  </button>
-)}
+
 
           {misFichajesHoy.length === 0 && (
             <div style={{ textAlign:"center", fontSize:13, color:COLORS.muted, marginTop:12 }}>No has fichado hoy todavía</div>
