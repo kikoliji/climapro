@@ -341,10 +341,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
               </button>
             )}
           </div>
-{!tramoAbierto && (
-  <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
-    {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Entrada" : "🟢 Iniciar tramo tarde"}
-  </button>
+
 )}
 {tramoAbierto && (
   <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
