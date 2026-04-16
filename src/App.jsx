@@ -79,75 +79,41 @@ function horaActual() {
   return `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
 }
 
-// Agrupa fichajes por trabajador+fecha y calcula total de minutos del día
-function agruparPorDia(fichajes) {
-  const grupos = {};
-  fichajes.forEach(f => {
-    const clave = `${f.trabajador}__${f.fecha}`;
-    if (!grupos[clave]) grupos[clave] = { trabajador: f.fecha, fecha: f.fecha, nombre: f.trabajador, tramos: [], totalMins: 0 };
-    grupos[clave].tramos.push(f);
-    grupos[clave].totalMins += calcMinutos(f.entrada, f.salida);
-  });
-  return Object.values(grupos);
-}
-
 function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const ahora = new Date();
   const hace4años = new Date();
   hace4años.setFullYear(ahora.getFullYear() - 4);
-
   const registros = fichajes
     .filter(f => f.trabajador === trabajador && new Date(f.fecha) >= hace4años)
-    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.entrada.localeCompare(b.entrada));
-
-  // Agrupar por día para mostrar totales diarios
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.entrada||"").localeCompare(b.entrada||""));
   const porDia = {};
-  registros.forEach(f => {
-    if (!porDia[f.fecha]) porDia[f.fecha] = [];
-    porDia[f.fecha].push(f);
-  });
+  registros.forEach(f => { if (!porDia[f.fecha]) porDia[f.fecha] = []; porDia[f.fecha].push(f); });
 
   pdf.setFillColor(15, 17, 23);
   pdf.rect(0, 0, 210, 40, "F");
-  pdf.setTextColor(0, 196, 255);
-  pdf.setFontSize(20);
-  pdf.setFont("helvetica", "bold");
+  pdf.setTextColor(0, 196, 255); pdf.setFontSize(20); pdf.setFont("helvetica", "bold");
   pdf.text("REGISTRO DE JORNADA LABORAL", 105, 15, { align: "center" });
-  pdf.setTextColor(200, 200, 200);
-  pdf.setFontSize(11);
+  pdf.setTextColor(200, 200, 200); pdf.setFontSize(11);
   pdf.text(`Empresa: ${empresa}`, 105, 23, { align: "center" });
-  pdf.setTextColor(150, 150, 150);
-  pdf.setFontSize(9);
+  pdf.setTextColor(150, 150, 150); pdf.setFontSize(9);
   pdf.text("Art. 34.9 del Estatuto de los Trabajadores — RDL 8/2019", 105, 30, { align: "center" });
-
-  pdf.setTextColor(30, 30, 30);
-  pdf.setFontSize(11);
-  pdf.setFont("helvetica", "bold");
+  pdf.setTextColor(30, 30, 30); pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
   pdf.text("DATOS DEL TRABAJADOR", 14, 50);
-  pdf.setDrawColor(0, 196, 255);
-  pdf.setLineWidth(0.5);
-  pdf.line(14, 52, 196, 52);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-  pdf.setTextColor(50, 50, 50);
+  pdf.setDrawColor(0, 196, 255); pdf.setLineWidth(0.5); pdf.line(14, 52, 196, 52);
+  pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(50, 50, 50);
   pdf.text(`Nombre: ${trabajador}`, 14, 60);
   pdf.text(`Período: ${hace4años.toLocaleDateString("es-ES")} — ${ahora.toLocaleDateString("es-ES")}`, 14, 67);
-  pdf.text(`Total tramos: ${registros.length} | Días trabajados: ${Object.keys(porDia).length}`, 14, 74);
+  pdf.text(`Total tramos: ${registros.length} | Días: ${Object.keys(porDia).length}`, 14, 74);
   const totalMins = registros.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
-  pdf.text(`Total horas: ${Math.floor(totalMins / 60)}h ${totalMins % 60}m`, 120, 60);
+  pdf.text(`Total horas: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 120, 60);
   pdf.text(`Generado: ${ahora.toLocaleDateString("es-ES")} ${ahora.toLocaleTimeString("es-ES")}`, 120, 67);
-
-  pdf.setFontSize(11);
-  pdf.setFont("helvetica", "bold");
-  pdf.setTextColor(30, 30, 30);
+  pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 30, 30);
   pdf.text("REGISTROS DE JORNADA (HORARIO PARTIDO)", 14, 85);
   pdf.line(14, 87, 196, 87);
 
   if (registros.length === 0) {
-    pdf.setFont("helvetica", "italic");
-    pdf.setFontSize(10);
-    pdf.setTextColor(150, 150, 150);
+    pdf.setFont("helvetica", "italic"); pdf.setFontSize(10); pdf.setTextColor(150, 150, 150);
     pdf.text("No hay registros en el período seleccionado.", 14, 97);
   } else {
     const rows = [];
@@ -159,41 +125,31 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
         rows.push([
           i === 0 ? fecha : "",
           i === 0 ? dia.charAt(0).toUpperCase() + dia.slice(1) : "",
-          `Tramo ${i + 1}`,
-          f.entrada || "—",
-          f.salida || "—",
+          `Tramo ${i+1}`, f.entrada||"—", f.salida||"—",
           calcHoras(f.entrada, f.salida),
-          i === tramos.length - 1 ? `${Math.floor(totalDia/60)}h ${totalDia%60}m` : "",
-          f.notas || ""
+          i === tramos.length-1 ? `${Math.floor(totalDia/60)}h ${totalDia%60}m` : "",
+          f.notas||""
         ]);
       });
     });
-
     autoTable(pdf, {
       startY: 92,
-      head: [["Fecha", "Día", "Tramo", "Entrada", "Salida", "Horas", "Total día", "Notas"]],
+      head: [["Fecha","Día","Tramo","Entrada","Salida","Horas","Total día","Notas"]],
       body: rows,
-      headStyles: { fillColor: [15, 17, 23], textColor: [0, 196, 255], fontStyle: "bold", fontSize: 8 },
-      bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      columnStyles: {
-        0: { cellWidth: 24 }, 1: { cellWidth: 14 }, 2: { cellWidth: 18 },
-        3: { cellWidth: 18 }, 4: { cellWidth: 18 }, 5: { cellWidth: 18 },
-        6: { cellWidth: 20 }, 7: { cellWidth: "auto" }
-      },
-      margin: { left: 14, right: 14 },
+      headStyles: { fillColor:[15,17,23], textColor:[0,196,255], fontStyle:"bold", fontSize:8 },
+      bodyStyles: { fontSize:8, textColor:[50,50,50] },
+      alternateRowStyles: { fillColor:[245,247,250] },
+      columnStyles: { 0:{cellWidth:24},1:{cellWidth:14},2:{cellWidth:18},3:{cellWidth:18},4:{cellWidth:18},5:{cellWidth:18},6:{cellWidth:20},7:{cellWidth:"auto"} },
+      margin: { left:14, right:14 },
     });
   }
-
   const totalPaginas = pdf.getNumberOfPages();
   for (let i = 1; i <= totalPaginas; i++) {
-    pdf.setPage(i);
-    pdf.setFontSize(8);
-    pdf.setTextColor(150, 150, 150);
-    pdf.text(`Página ${i} de ${totalPaginas}`, 105, 290, { align: "center" });
-    pdf.text("Documento generado por ClimaPro — Registro obligatorio según RDL 8/2019", 105, 295, { align: "center" });
+    pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(150,150,150);
+    pdf.text(`Página ${i} de ${totalPaginas}`, 105, 290, { align:"center" });
+    pdf.text("Documento generado por ClimaPro — Registro obligatorio según RDL 8/2019", 105, 295, { align:"center" });
   }
-  pdf.save(`registro_horario_${trabajador.replace(/\s/g, "_")}_${ahora.getFullYear()}.pdf`);
+  pdf.save(`registro_horario_${trabajador.replace(/\s/g,"_")}_${ahora.getFullYear()}.pdf`);
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -205,13 +161,9 @@ function Login() {
 
   const handleLogin = async () => {
     if (!email || !password) return;
-    setCargando(true);
-    setError("");
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (e) {
-      setError("Email o contraseña incorrectos");
-    }
+    setCargando(true); setError("");
+    try { await signInWithEmailAndPassword(auth, email, password); }
+    catch (e) { setError("Email o contraseña incorrectos"); }
     setCargando(false);
   };
 
@@ -225,8 +177,8 @@ function Login() {
         </div>
         <div className="card" style={{ padding:28 }}>
           <div style={{ display:"grid", gap:16 }}>
-            <div><label>Email</label><input className="input" type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key==="Enter"&&handleLogin()} /></div>
-            <div><label>Contraseña</label><input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key==="Enter"&&handleLogin()} /></div>
+            <div><label>Email</label><input className="input" type="email" placeholder="tu@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
+            <div><label>Contraseña</label><input className="input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
             {error && <div style={{ fontSize:13, color:COLORS.danger, textAlign:"center" }}>{error}</div>}
             <button className="btn btn-primary" onClick={handleLogin} disabled={cargando} style={{ width:"100%", padding:12, fontSize:14 }}>
               {cargando ? "Entrando..." : "Entrar"}
@@ -238,27 +190,26 @@ function Login() {
   );
 }
 
-// ─── VISTA TRABAJADOR (horario partido) ──────────────────────────────────────
+// ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const [fichando, setFichando] = useState(false);
   const hoy = new Date().toISOString().split("T")[0];
 
   const misFichajesHoy = fichajes
     .filter(f => f.trabajador === usuarioInfo.nombre && f.fecha === hoy)
-    .sort((a, b) => a.entrada.localeCompare(b.entrada));
+    .sort((a, b) => (a.entrada||"").localeCompare(b.entrada||""));
 
   const misUltimos = fichajes
     .filter(f => f.trabajador === usuarioInfo.nombre)
-    .slice(0, 15);
+    .slice(0, 20);
 
   const misEncargos = encargos.filter(e =>
     e.asignado === usuarioInfo.nombre &&
     e.estado !== "Completado" && e.estado !== "Cancelado"
   );
 
-  // Último tramo del día
   const ultimoTramo = misFichajesHoy[misFichajesHoy.length - 1];
-  const tramoAbierto = ultimoTramo && !ultimoTramo.salida;
+  const hayTramoAbierto = ultimoTramo != null && (!ultimoTramo.salida || ultimoTramo.salida === "");
   const totalHoyMins = misFichajesHoy.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
 
   const ficharEntrada = async () => {
@@ -281,12 +232,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
     setFichando(false);
   };
 
-  // Agrupar ultimos fichajes por fecha
   const porFecha = {};
-  misUltimos.forEach(f => {
-    if (!porFecha[f.fecha]) porFecha[f.fecha] = [];
-    porFecha[f.fecha].push(f);
-  });
+  misUltimos.forEach(f => { if (!porFecha[f.fecha]) porFecha[f.fecha] = []; porFecha[f.fecha].push(f); });
 
   return (
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
@@ -299,9 +246,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
       </div>
 
       <div style={{ padding:24, maxWidth:800, margin:"0 auto" }}>
-        {/* Panel fichar */}
         <div className="card" style={{ padding:28, marginBottom:24, borderTop:`3px solid ${COLORS.accent}` }}>
-          <div style={{ textAlign:"center", marginBottom:20 }}>
+          <div style={{ textAlign:"center", marginBottom:16 }}>
             <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700 }}>
               {new Date().toLocaleDateString("es-ES", { weekday:"long", day:"numeric", month:"long" })}
             </div>
@@ -312,7 +258,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             )}
           </div>
 
-          {/* Tramos del día */}
           {misFichajesHoy.length > 0 && (
             <div style={{ marginBottom:20 }}>
               {misFichajesHoy.map((f, i) => (
@@ -320,30 +265,40 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                   <span style={{ fontSize:12, color:COLORS.muted, minWidth:60 }}>Tramo {i+1}</span>
                   <span style={{ fontSize:13, color:COLORS.green }}>{f.entrada}</span>
                   <span style={{ color:COLORS.muted }}>→</span>
-                  <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>{f.salida || "en curso..."}</span>
-                  {f.salida && <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>}
-                  {!f.salida && <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>}
+                  <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>
+                    {f.salida || "en curso..."}
+                  </span>
+                  {f.salida
+                    ? <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>
+                    : <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>
+                  }
                 </div>
               ))}
             </div>
           )}
 
-         {/* Botones */}
           <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
-            {!tramoAbierto && (
-              <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
+            {!hayTramoAbierto && (
+              <button
+                className="btn btn-primary"
+                style={{ padding:"12px 32px", fontSize:15 }}
+                onClick={ficharEntrada}
+                disabled={fichando}
+              >
                 {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Entrada" : "🟢 Inicio tramo tarde"}
               </button>
             )}
-            {tramoAbierto && (
-              <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
+            {hayTramoAbierto && (
+              <button
+                className="btn"
+                style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }}
+                onClick={ficharSalida}
+                disabled={fichando}
+              >
                 {fichando ? "Registrando..." : "🔴 Salida"}
               </button>
             )}
           </div>
-
-)}
-
 
           {misFichajesHoy.length === 0 && (
             <div style={{ textAlign:"center", fontSize:13, color:COLORS.muted, marginTop:12 }}>No has fichado hoy todavía</div>
@@ -351,7 +306,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-          {/* Mis encargos */}
           <div className="card" style={{ padding:20 }}>
             <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
             {misEncargos.length === 0
@@ -366,7 +320,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             }
           </div>
 
-          {/* Historial agrupado por día */}
           <div className="card" style={{ padding:20 }}>
             <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
             {Object.keys(porFecha).length === 0
@@ -377,11 +330,11 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                   <div key={fecha} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}` }}>
                     <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
                       <span style={{ fontSize:12, fontWeight:600 }}>{fecha}</span>
-                      <span style={{ fontSize:12, color:COLORS.accent }}>{Math.floor(totalDia/60)}h {totalDia%60}m total</span>
+                      <span style={{ fontSize:12, color:COLORS.accent }}>{Math.floor(totalDia/60)}h {totalDia%60}m</span>
                     </div>
-                    {tramos.map((f, i) => (
+                    {tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f, i) => (
                       <div key={f.id} style={{ fontSize:11, color:COLORS.muted, paddingLeft:8 }}>
-                        Tramo {i+1}: {f.entrada} → {f.salida || "—"} {f.salida ? `(${calcHoras(f.entrada, f.salida)})` : ""}
+                        Tramo {i+1}: {f.entrada} → {f.salida||"—"} {f.salida?`(${calcHoras(f.entrada,f.salida)})` : ""}
                       </div>
                     ))}
                   </div>
@@ -485,15 +438,15 @@ function GestionUsuarios({ trabajadores }) {
             El usuario accederá con el email y contraseña que definas aquí.
           </div>
           <div><label>Trabajador</label>
-            <select className="select" style={{ width:"100%" }} value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})}>
+            <select className="select" style={{ width:"100%" }} value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})}>
               <option value="">Selecciona trabajador</option>
-              {trabajadores.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+              {trabajadores.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}
             </select>
           </div>
-          <div><label>Email</label><input className="input" type="email" placeholder="trabajador@empresa.com" value={form.email} onChange={e => setForm({...form,email:e.target.value})} /></div>
-          <div><label>Contraseña</label><input className="input" type="password" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e => setForm({...form,password:e.target.value})} /></div>
+          <div><label>Email</label><input className="input" type="email" placeholder="trabajador@empresa.com" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+          <div><label>Contraseña</label><input className="input" type="password" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} /></div>
           <div><label>Rol</label>
-            <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e => setForm({...form,rol:e.target.value})}>
+            <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e=>setForm({...form,rol:e.target.value})}>
               <option value="trabajador">Trabajador (fichar + ver encargos)</option>
               <option value="admin">Administrador (acceso total)</option>
             </select>
@@ -527,8 +480,8 @@ function Trabajadores({ trabajadores, cargandoT }) {
     setGuardando(false); setModal(false);
   };
   const eliminar = async (id) => { await deleteDoc(doc(db,"trabajadores",id)); setConfirmarEliminar(null); };
-  const activos = trabajadores.filter(t => t.estado!=="Inactivo");
-  const inactivos = trabajadores.filter(t => t.estado==="Inactivo");
+  const activos = trabajadores.filter(t=>t.estado!=="Inactivo");
+  const inactivos = trabajadores.filter(t=>t.estado==="Inactivo");
 
   return (
     <div>
@@ -593,7 +546,7 @@ function Trabajadores({ trabajadores, cargandoT }) {
   );
 }
 
-// ─── FICHAJES (admin) con horario partido ─────────────────────────────────────
+// ─── FICHAJES (admin) ─────────────────────────────────────────────────────────
 function Fichajes({ trabajadores, fichajes, cargando }) {
   const [modal, setModal] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -603,8 +556,8 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
   const [modalPDF, setModalPDF] = useState(false);
   const [trabajadorPDF, setTrabajadorPDF] = useState("");
   const [vistaAgrupada, setVistaAgrupada] = useState(true);
-  const nombresActivos = trabajadores.filter(t => t.estado!=="Inactivo").map(t => t.nombre);
-  const todosNombres = trabajadores.map(t => t.nombre);
+  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
+  const todosNombres = trabajadores.map(t=>t.nombre);
   const [form, setForm] = useState({ trabajador:nombresActivos[0]||"", fecha:new Date().toISOString().split("T")[0], entrada:"08:00", salida:"", notas:"" });
 
   useEffect(() => { if (nombresActivos.length>0&&!form.trabajador) setForm(f=>({...f,trabajador:nombresActivos[0]})); }, [trabajadores]);
@@ -617,18 +570,14 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
   };
 
   const eliminar = async (id) => { await deleteDoc(doc(db,"fichajes",id)); setConfirmarEliminar(null); };
-
-  const registrarSalida = async (f) => {
-    await updateDoc(doc(db,"fichajes",f.id), { salida: horaActual() });
-  };
+  const registrarSalida = async (f) => { await updateDoc(doc(db,"fichajes",f.id), { salida: horaActual() }); };
 
   const lista = fichajes
-    .filter(f => filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador)
-    .filter(f => !filtroFecha||f.fecha===filtroFecha);
+    .filter(f=>filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador)
+    .filter(f=>!filtroFecha||f.fecha===filtroFecha);
 
-  const horasTotal = lista.reduce((s,f) => s+calcMinutos(f.entrada,f.salida), 0);
+  const horasTotal = lista.reduce((s,f)=>s+calcMinutos(f.entrada,f.salida),0);
 
-  // Vista agrupada por trabajador+día
   const grupos = {};
   lista.forEach(f => {
     const clave = `${f.trabajador}__${f.fecha}`;
@@ -636,7 +585,7 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
     grupos[clave].tramos.push(f);
     grupos[clave].totalMins += calcMinutos(f.entrada, f.salida);
   });
-  const listaAgrupada = Object.values(grupos).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const listaAgrupada = Object.values(grupos).sort((a,b)=>b.fecha.localeCompare(a.fecha)||a.trabajador.localeCompare(b.trabajador));
 
   return (
     <div>
@@ -644,7 +593,7 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
         <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Control Horario ☁</h2>
         <div style={{display:"flex",gap:8}}>
           <button className="btn btn-ghost" onClick={()=>setVistaAgrupada(!vistaAgrupada)} style={{fontSize:12}}>
-            {vistaAgrupada ? "Vista detallada" : "Vista agrupada"}
+            {vistaAgrupada?"Vista detallada":"Vista agrupada"}
           </button>
           <button className="btn btn-ghost" onClick={()=>{setTrabajadorPDF(todosNombres[0]||"");setModalPDF(true);}}>📄 PDF 4 años</button>
           <button className="btn btn-primary" onClick={()=>setModal(true)}>+ Registrar fichaje</button>
@@ -664,7 +613,6 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
       </div>
 
       {vistaAgrupada ? (
-        // Vista agrupada por día
         <div style={{display:"grid",gap:12}}>
           {listaAgrupada.length===0
             ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>
@@ -680,13 +628,13 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
                   </span>
                 </div>
                 <div style={{display:"grid",gap:6}}>
-                  {g.tramos.sort((a,b)=>a.entrada.localeCompare(b.entrada)).map((f,i) => (
+                  {g.tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f,i)=>(
                     <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"6px 12px",background:COLORS.surface,borderRadius:8}}>
                       <span style={{fontSize:12,color:COLORS.muted,minWidth:55}}>Tramo {i+1}</span>
                       <span style={{fontSize:13,color:COLORS.green}}>{f.entrada}</span>
                       <span style={{color:COLORS.muted}}>→</span>
                       <span style={{fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>
-                        {f.salida || <button className="btn btn-primary" style={{fontSize:11,padding:"2px 8px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}
+                        {f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"2px 8px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}
                       </span>
                       {f.salida&&<span style={{fontSize:12,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span>}
                       {f.notas&&<span style={{fontSize:11,color:COLORS.muted,fontStyle:"italic",flex:1}}>"{f.notas}"</span>}
@@ -699,7 +647,6 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
           }
         </div>
       ) : (
-        // Vista detallada (tabla)
         <div className="card" style={{overflow:"hidden"}}>
           {cargando?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>Cargando...</div>:lista.length===0?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>:(
             <table style={{width:"100%",borderCollapse:"collapse"}}>
@@ -722,7 +669,7 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
 
       {modalPDF&&<Modal title="📄 Informe PDF — Últimos 4 años" onClose={()=>setModalPDF(false)}>
         <div style={{display:"grid",gap:16}}>
-          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF con todos los tramos de jornada cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>.</div>
+          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>.</div>
           <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={trabajadorPDF} onChange={e=>setTrabajadorPDF(e.target.value)}>{todosNombres.map(t=><option key={t}>{t}</option>)}</select></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModalPDF(false)}>Cancelar</button>
