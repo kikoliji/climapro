@@ -74,14 +74,39 @@ function calcMinutos(entrada, salida) {
   return mins > 0 ? mins : 0;
 }
 
+function horaActual() {
+  const ahora = new Date();
+  return `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
+}
+
+// Agrupa fichajes por trabajador+fecha y calcula total de minutos del día
+function agruparPorDia(fichajes) {
+  const grupos = {};
+  fichajes.forEach(f => {
+    const clave = `${f.trabajador}__${f.fecha}`;
+    if (!grupos[clave]) grupos[clave] = { trabajador: f.fecha, fecha: f.fecha, nombre: f.trabajador, tramos: [], totalMins: 0 };
+    grupos[clave].tramos.push(f);
+    grupos[clave].totalMins += calcMinutos(f.entrada, f.salida);
+  });
+  return Object.values(grupos);
+}
+
 function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const ahora = new Date();
   const hace4años = new Date();
   hace4años.setFullYear(ahora.getFullYear() - 4);
+
   const registros = fichajes
     .filter(f => f.trabajador === trabajador && new Date(f.fecha) >= hace4años)
-    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.entrada.localeCompare(b.entrada));
+
+  // Agrupar por día para mostrar totales diarios
+  const porDia = {};
+  registros.forEach(f => {
+    if (!porDia[f.fecha]) porDia[f.fecha] = [];
+    porDia[f.fecha].push(f);
+  });
 
   pdf.setFillColor(15, 17, 23);
   pdf.rect(0, 0, 210, 40, "F");
@@ -108,7 +133,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   pdf.setTextColor(50, 50, 50);
   pdf.text(`Nombre: ${trabajador}`, 14, 60);
   pdf.text(`Período: ${hace4años.toLocaleDateString("es-ES")} — ${ahora.toLocaleDateString("es-ES")}`, 14, 67);
-  pdf.text(`Total registros: ${registros.length}`, 14, 74);
+  pdf.text(`Total tramos: ${registros.length} | Días trabajados: ${Object.keys(porDia).length}`, 14, 74);
   const totalMins = registros.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
   pdf.text(`Total horas: ${Math.floor(totalMins / 60)}h ${totalMins % 60}m`, 120, 60);
   pdf.text(`Generado: ${ahora.toLocaleDateString("es-ES")} ${ahora.toLocaleTimeString("es-ES")}`, 120, 67);
@@ -116,7 +141,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   pdf.setFontSize(11);
   pdf.setFont("helvetica", "bold");
   pdf.setTextColor(30, 30, 30);
-  pdf.text("REGISTROS DE JORNADA", 14, 85);
+  pdf.text("REGISTROS DE JORNADA (HORARIO PARTIDO)", 14, 85);
   pdf.line(14, 87, 196, 87);
 
   if (registros.length === 0) {
@@ -125,18 +150,37 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
     pdf.setTextColor(150, 150, 150);
     pdf.text("No hay registros en el período seleccionado.", 14, 97);
   } else {
+    const rows = [];
+    Object.entries(porDia).forEach(([fecha, tramos]) => {
+      const totalDia = tramos.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
+      const fechaObj = new Date(fecha + "T00:00:00");
+      const dia = fechaObj.toLocaleDateString("es-ES", { weekday: "short" });
+      tramos.forEach((f, i) => {
+        rows.push([
+          i === 0 ? fecha : "",
+          i === 0 ? dia.charAt(0).toUpperCase() + dia.slice(1) : "",
+          `Tramo ${i + 1}`,
+          f.entrada || "—",
+          f.salida || "—",
+          calcHoras(f.entrada, f.salida),
+          i === tramos.length - 1 ? `${Math.floor(totalDia/60)}h ${totalDia%60}m` : "",
+          f.notas || ""
+        ]);
+      });
+    });
+
     autoTable(pdf, {
       startY: 92,
-      head: [["Fecha", "Día", "Entrada", "Salida", "Horas", "Notas"]],
-      body: registros.map(f => {
-        const fecha = new Date(f.fecha + "T00:00:00");
-        const dia = fecha.toLocaleDateString("es-ES", { weekday: "short" });
-        return [f.fecha, dia.charAt(0).toUpperCase() + dia.slice(1), f.entrada || "—", f.salida || "—", calcHoras(f.entrada, f.salida), f.notas || ""];
-      }),
-      headStyles: { fillColor: [15, 17, 23], textColor: [0, 196, 255], fontStyle: "bold", fontSize: 9 },
-      bodyStyles: { fontSize: 9, textColor: [50, 50, 50] },
+      head: [["Fecha", "Día", "Tramo", "Entrada", "Salida", "Horas", "Total día", "Notas"]],
+      body: rows,
+      headStyles: { fillColor: [15, 17, 23], textColor: [0, 196, 255], fontStyle: "bold", fontSize: 8 },
+      bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
       alternateRowStyles: { fillColor: [245, 247, 250] },
-      columnStyles: { 0:{cellWidth:28}, 1:{cellWidth:18}, 2:{cellWidth:22}, 3:{cellWidth:22}, 4:{cellWidth:22}, 5:{cellWidth:"auto"} },
+      columnStyles: {
+        0: { cellWidth: 24 }, 1: { cellWidth: 14 }, 2: { cellWidth: 18 },
+        3: { cellWidth: 18 }, 4: { cellWidth: 18 }, 5: { cellWidth: 18 },
+        6: { cellWidth: 20 }, 7: { cellWidth: "auto" }
+      },
       margin: { left: 14, right: 14 },
     });
   }
@@ -153,7 +197,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-function Login({ onLogin }) {
+function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -181,18 +225,8 @@ function Login({ onLogin }) {
         </div>
         <div className="card" style={{ padding:28 }}>
           <div style={{ display:"grid", gap:16 }}>
-            <div>
-              <label>Email</label>
-              <input className="input" type="email" placeholder="tu@email.com" value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleLogin()} />
-            </div>
-            <div>
-              <label>Contraseña</label>
-              <input className="input" type="password" placeholder="••••••••" value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleLogin()} />
-            </div>
+            <div><label>Email</label><input className="input" type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key==="Enter"&&handleLogin()} /></div>
+            <div><label>Contraseña</label><input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key==="Enter"&&handleLogin()} /></div>
             {error && <div style={{ fontSize:13, color:COLORS.danger, textAlign:"center" }}>{error}</div>}
             <button className="btn btn-primary" onClick={handleLogin} disabled={cargando} style={{ width:"100%", padding:12, fontSize:14 }}>
               {cargando ? "Entrando..." : "Entrar"}
@@ -204,40 +238,58 @@ function Login({ onLogin }) {
   );
 }
 
-// ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
+// ─── VISTA TRABAJADOR (horario partido) ──────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const [fichando, setFichando] = useState(false);
   const hoy = new Date().toISOString().split("T")[0];
-  const misFichajes = fichajes.filter(f => f.trabajador === usuarioInfo.nombre).slice(0, 10);
-  const misEncargos = encargos.filter(e => e.asignado === usuarioInfo.nombre && e.estado !== "Completado" && e.estado !== "Cancelado");
-  const fichajeHoy = fichajes.find(f => f.trabajador === usuarioInfo.nombre && f.fecha === hoy);
+
+  const misFichajesHoy = fichajes
+    .filter(f => f.trabajador === usuarioInfo.nombre && f.fecha === hoy)
+    .sort((a, b) => a.entrada.localeCompare(b.entrada));
+
+  const misUltimos = fichajes
+    .filter(f => f.trabajador === usuarioInfo.nombre)
+    .slice(0, 15);
+
+  const misEncargos = encargos.filter(e =>
+    e.asignado === usuarioInfo.nombre &&
+    e.estado !== "Completado" && e.estado !== "Cancelado"
+  );
+
+  // Último tramo del día
+  const ultimoTramo = misFichajesHoy[misFichajesHoy.length - 1];
+  const tramoAbierto = ultimoTramo && !ultimoTramo.salida;
+  const totalHoyMins = misFichajesHoy.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
 
   const ficharEntrada = async () => {
     setFichando(true);
-    const ahora = new Date();
-    const hora = `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
     await addDoc(collection(db, "fichajes"), {
       trabajador: usuarioInfo.nombre,
       fecha: hoy,
-      entrada: hora,
+      entrada: horaActual(),
       salida: "",
-      notas: ""
+      notas: "",
+      tramo: misFichajesHoy.length + 1
     });
     setFichando(false);
   };
 
   const ficharSalida = async () => {
-    if (!fichajeHoy) return;
+    if (!ultimoTramo) return;
     setFichando(true);
-    const ahora = new Date();
-    const hora = `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
-    await updateDoc(doc(db, "fichajes", fichajeHoy.id), { salida: hora });
+    await updateDoc(doc(db, "fichajes", ultimoTramo.id), { salida: horaActual() });
     setFichando(false);
   };
 
+  // Agrupar ultimos fichajes por fecha
+  const porFecha = {};
+  misUltimos.forEach(f => {
+    if (!porFecha[f.fecha]) porFecha[f.fecha] = [];
+    porFecha[f.fecha].push(f);
+  });
+
   return (
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
-      {/* Header */}
       <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}`, padding:"16px 24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div style={{ fontFamily:"Rajdhani", fontSize:20, fontWeight:700, color:COLORS.accent }}>❄ ClimaPro</div>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -247,65 +299,101 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
       </div>
 
       <div style={{ padding:24, maxWidth:800, margin:"0 auto" }}>
-        {/* Fichar */}
-        <div className="card" style={{ padding:28, marginBottom:24, textAlign:"center", borderTop:`3px solid ${COLORS.accent}` }}>
-          <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700, marginBottom:8 }}>
-            {new Date().toLocaleDateString("es-ES", { weekday:"long", day:"numeric", month:"long" })}
-          </div>
-          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:24 }}>
-            {fichajeHoy
-              ? fichajeHoy.salida
-                ? `✅ Jornada completada: ${fichajeHoy.entrada} → ${fichajeHoy.salida} (${calcHoras(fichajeHoy.entrada, fichajeHoy.salida)})`
-                : `⏱ Entrada registrada a las ${fichajeHoy.entrada}`
-              : "No has fichado hoy"}
+        {/* Panel fichar */}
+        <div className="card" style={{ padding:28, marginBottom:24, borderTop:`3px solid ${COLORS.accent}` }}>
+          <div style={{ textAlign:"center", marginBottom:20 }}>
+            <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700 }}>
+              {new Date().toLocaleDateString("es-ES", { weekday:"long", day:"numeric", month:"long" })}
+            </div>
+            {totalHoyMins > 0 && (
+              <div style={{ fontSize:13, color:COLORS.accent, marginTop:4 }}>
+                ⏱ Total hoy: {Math.floor(totalHoyMins/60)}h {totalHoyMins%60}m
+              </div>
+            )}
           </div>
 
-          {!fichajeHoy && (
-            <button className="btn btn-primary" style={{ padding:"14px 40px", fontSize:16 }} onClick={ficharEntrada} disabled={fichando}>
-              {fichando ? "Registrando..." : "🟢 Registrar entrada"}
-            </button>
+          {/* Tramos del día */}
+          {misFichajesHoy.length > 0 && (
+            <div style={{ marginBottom:20 }}>
+              {misFichajesHoy.map((f, i) => (
+                <div key={f.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 16px", background:COLORS.surface, borderRadius:8, marginBottom:6 }}>
+                  <span style={{ fontSize:12, color:COLORS.muted, minWidth:60 }}>Tramo {i+1}</span>
+                  <span style={{ fontSize:13, color:COLORS.green }}>{f.entrada}</span>
+                  <span style={{ color:COLORS.muted }}>→</span>
+                  <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>{f.salida || "en curso..."}</span>
+                  {f.salida && <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>}
+                  {!f.salida && <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>}
+                </div>
+              ))}
+            </div>
           )}
-          {fichajeHoy && !fichajeHoy.salida && (
-            <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"14px 40px", fontSize:16 }} onClick={ficharSalida} disabled={fichando}>
-              {fichando ? "Registrando..." : "🔴 Registrar salida"}
-            </button>
-          )}
-          {fichajeHoy && fichajeHoy.salida && (
-            <div style={{ fontSize:28 }}>✅</div>
+
+         {/* Botones */}
+          <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
+            {!tramoAbierto && (
+              <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
+                {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Entrada" : "🟢 Inicio tramo tarde"}
+              </button>
+            )}
+            {tramoAbierto && (
+              <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
+                {fichando ? "Registrando..." : "🔴 Salida"}
+              </button>
+            )}
+          </div>
+{!tramoAbierto && (
+  <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
+    {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Entrada" : "🟢 Iniciar tramo tarde"}
+  </button>
+)}
+{tramoAbierto && (
+  <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
+    {fichando ? "Registrando..." : "🔴 Salida"}
+  </button>
+)}
+
+          {misFichajesHoy.length === 0 && (
+            <div style={{ textAlign:"center", fontSize:13, color:COLORS.muted, marginTop:12 }}>No has fichado hoy todavía</div>
           )}
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
           {/* Mis encargos */}
           <div className="card" style={{ padding:20 }}>
-            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos activos</div>
+            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
             {misEncargos.length === 0
               ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos asignados</div>
               : misEncargos.map(e => (
                 <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
                   <div style={{ fontSize:13, fontWeight:600 }}>{e.titulo}</div>
-                  <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>
-                    {e.cliente} · {e.fecha}
-                  </div>
-                  <div style={{ marginTop:4 }}>
-                    <span className="badge" style={{ background:"rgba(255,107,53,.2)", color:COLORS.warm }}>{e.prioridad}</span>
-                  </div>
+                  <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>{e.cliente} · {e.fecha}</div>
+                  <div style={{ marginTop:4 }}><span className="badge" style={{ background:"rgba(255,107,53,.2)", color:COLORS.warm }}>{e.prioridad}</span></div>
                 </div>
               ))
             }
           </div>
 
-          {/* Mis últimos fichajes */}
+          {/* Historial agrupado por día */}
           <div className="card" style={{ padding:20 }}>
-            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos fichajes</div>
-            {misFichajes.length === 0
+            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
+            {Object.keys(porFecha).length === 0
               ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
-              : misFichajes.map(f => (
-                <div key={f.id} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between" }}>
-                  <div style={{ fontSize:12, color:COLORS.muted }}>{f.fecha}</div>
-                  <div style={{ fontSize:12 }}>{f.entrada} → {f.salida || "..."} <span style={{ color:COLORS.accent }}>{calcHoras(f.entrada, f.salida)}</span></div>
-                </div>
-              ))
+              : Object.entries(porFecha).slice(0, 5).map(([fecha, tramos]) => {
+                const totalDia = tramos.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
+                return (
+                  <div key={fecha} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                      <span style={{ fontSize:12, fontWeight:600 }}>{fecha}</span>
+                      <span style={{ fontSize:12, color:COLORS.accent }}>{Math.floor(totalDia/60)}h {totalDia%60}m total</span>
+                    </div>
+                    {tramos.map((f, i) => (
+                      <div key={f.id} style={{ fontSize:11, color:COLORS.muted, paddingLeft:8 }}>
+                        Tramo {i+1}: {f.entrada} → {f.salida || "—"} {f.salida ? `(${calcHoras(f.entrada, f.salida)})` : ""}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
             }
           </div>
         </div>
@@ -339,7 +427,7 @@ function EstadoBadge({ estado }) {
     Baja:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Activo:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
     Inactivo:{bg:"rgba(139,143,168,.15)",color:COLORS.muted},
   };
-  const c = colors[estado] || {bg:"rgba(139,143,168,.15)",color:COLORS.muted};
+  const c = colors[estado]||{bg:"rgba(139,143,168,.15)",color:COLORS.muted};
   return <span className="badge" style={{background:c.bg,color:c.color}}>{estado}</span>;
 }
 
@@ -352,7 +440,7 @@ function Header({ title, onAdd, addLabel }) {
   );
 }
 
-// ─── GESTIÓN USUARIOS (solo admin) ───────────────────────────────────────────
+// ─── GESTIÓN USUARIOS ────────────────────────────────────────────────────────
 function GestionUsuarios({ trabajadores }) {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ email:"", password:"", nombre:"", rol:"trabajador" });
@@ -361,33 +449,21 @@ function GestionUsuarios({ trabajadores }) {
   const [usuarios, setUsuarios] = useState([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "usuarios"), snap => {
-      setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
+    return onSnapshot(collection(db,"usuarios"), snap => setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()}))));
   }, []);
 
   const crearUsuario = async () => {
-    if (!form.email || !form.password || !form.nombre) return;
-    setGuardando(true);
-    setError("");
+    if (!form.email||!form.password||!form.nombre) return;
+    setGuardando(true); setError("");
     try {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
-      await setDoc(doc(db, "usuarios", cred.user.uid), {
-        email: form.email,
-        nombre: form.nombre,
-        rol: form.rol,
-      });
+      await setDoc(doc(db,"usuarios",cred.user.uid), { email:form.email, nombre:form.nombre, rol:form.rol });
       setModal(false);
       setForm({ email:"", password:"", nombre:"", rol:"trabajador" });
-    } catch (e) {
-      setError(e.code === "auth/email-already-in-use" ? "Este email ya está en uso" : "Error al crear el usuario");
+    } catch(e) {
+      setError(e.code==="auth/email-already-in-use"?"Este email ya está en uso":"Error al crear el usuario");
     }
     setGuardando(false);
-  };
-
-  const eliminarUsuario = async (id) => {
-    await deleteDoc(doc(db, "usuarios", id));
   };
 
   return (
@@ -395,52 +471,47 @@ function GestionUsuarios({ trabajadores }) {
       <Header title="Gestión de Usuarios ☁" onAdd={() => setModal(true)} addLabel="+ Crear usuario" />
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
         {usuarios.map(u => (
-          <div key={u.id} className="card" style={{ padding:20, borderLeft:`3px solid ${u.rol === "admin" ? COLORS.yellow : COLORS.accent}` }}>
+          <div key={u.id} className="card" style={{ padding:20, borderLeft:`3px solid ${u.rol==="admin"?COLORS.yellow:COLORS.accent}` }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-              <div style={{ fontSize:28 }}>{u.rol === "admin" ? "👑" : "👷"}</div>
-              <span className="badge" style={{ background: u.rol === "admin" ? "rgba(255,214,0,.2)" : "rgba(0,196,255,.15)", color: u.rol === "admin" ? COLORS.yellow : COLORS.accent }}>
-                {u.rol === "admin" ? "Administrador" : "Trabajador"}
+              <div style={{ fontSize:28 }}>{u.rol==="admin"?"👑":"👷"}</div>
+              <span className="badge" style={{ background:u.rol==="admin"?"rgba(255,214,0,.2)":"rgba(0,196,255,.15)", color:u.rol==="admin"?COLORS.yellow:COLORS.accent }}>
+                {u.rol==="admin"?"Administrador":"Trabajador"}
               </span>
             </div>
             <div style={{ fontWeight:700, fontSize:15 }}>{u.nombre}</div>
             <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{u.email}</div>
             <div style={{ marginTop:12 }}>
-              <button className="btn btn-danger" onClick={() => eliminarUsuario(u.id)}>🗑 Eliminar acceso</button>
+              <button className="btn btn-danger" onClick={() => deleteDoc(doc(db,"usuarios",u.id))}>🗑 Eliminar acceso</button>
             </div>
           </div>
         ))}
       </div>
-
-      {modal && (
-        <Modal title="Crear nuevo usuario" onClose={() => setModal(false)}>
-          <div style={{ display:"grid", gap:14 }}>
-            <div style={{ background:"rgba(0,196,255,0.08)", border:`1px solid ${COLORS.accent}33`, borderRadius:10, padding:12, fontSize:12, color:COLORS.muted }}>
-              El usuario recibirá acceso a la app con el email y contraseña que definas aquí.
-            </div>
-            <div><label>Nombre completo</label>
-              <select className="select" style={{ width:"100%" }} value={form.nombre} onChange={e => setForm({...form, nombre:e.target.value})}>
-                <option value="">Selecciona trabajador</option>
-                {trabajadores.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
-              </select>
-            </div>
-            <div><label>Email de acceso</label><input className="input" type="email" placeholder="trabajador@empresa.com" value={form.email} onChange={e => setForm({...form, email:e.target.value})} /></div>
-            <div><label>Contraseña</label><input className="input" type="password" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e => setForm({...form, password:e.target.value})} /></div>
-            <div><label>Rol</label>
-              <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e => setForm({...form, rol:e.target.value})}>
-                <option value="trabajador">Trabajador (fichar + ver encargos)</option>
-                <option value="admin">Administrador (acceso total)</option>
-              </select>
-            </div>
-            {error && <div style={{ fontSize:13, color:COLORS.danger }}>{error}</div>}
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={crearUsuario} disabled={guardando}>
-                {guardando ? "Creando..." : "Crear usuario"}
-              </button>
-            </div>
+      {modal && <Modal title="Crear usuario" onClose={() => setModal(false)}>
+        <div style={{ display:"grid", gap:14 }}>
+          <div style={{ background:"rgba(0,196,255,0.08)", border:`1px solid ${COLORS.accent}33`, borderRadius:10, padding:12, fontSize:12, color:COLORS.muted }}>
+            El usuario accederá con el email y contraseña que definas aquí.
           </div>
-        </Modal>
-      )}
+          <div><label>Trabajador</label>
+            <select className="select" style={{ width:"100%" }} value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})}>
+              <option value="">Selecciona trabajador</option>
+              {trabajadores.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+            </select>
+          </div>
+          <div><label>Email</label><input className="input" type="email" placeholder="trabajador@empresa.com" value={form.email} onChange={e => setForm({...form,email:e.target.value})} /></div>
+          <div><label>Contraseña</label><input className="input" type="password" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e => setForm({...form,password:e.target.value})} /></div>
+          <div><label>Rol</label>
+            <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e => setForm({...form,rol:e.target.value})}>
+              <option value="trabajador">Trabajador (fichar + ver encargos)</option>
+              <option value="admin">Administrador (acceso total)</option>
+            </select>
+          </div>
+          {error && <div style={{ fontSize:13, color:COLORS.danger }}>{error}</div>}
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={crearUsuario} disabled={guardando}>{guardando?"Creando...":"Crear usuario"}</button>
+          </div>
+        </div>
+      </Modal>}
     </div>
   );
 }
@@ -455,24 +526,21 @@ function Trabajadores({ trabajadores, cargandoT }) {
 
   const abrirNuevo = () => { setEditando(null); setForm({ nombre:"", telefono:"", email:"", cargo:"Técnico", estado:"Activo", notas:"" }); setModal(true); };
   const abrirEditar = (t) => { setEditando(t); setForm({ nombre:t.nombre, telefono:t.telefono||"", email:t.email||"", cargo:t.cargo||"Técnico", estado:t.estado||"Activo", notas:t.notas||"" }); setModal(true); };
-
   const guardar = async () => {
     if (!form.nombre) return;
     setGuardando(true);
-    if (editando) await updateDoc(doc(db, "trabajadores", editando.id), form);
-    else await addDoc(collection(db, "trabajadores"), form);
-    setGuardando(false);
-    setModal(false);
+    if (editando) await updateDoc(doc(db,"trabajadores",editando.id), form);
+    else await addDoc(collection(db,"trabajadores"), form);
+    setGuardando(false); setModal(false);
   };
-
-  const eliminar = async (id) => { await deleteDoc(doc(db, "trabajadores", id)); setConfirmarEliminar(null); };
-  const activos = trabajadores.filter(t => t.estado !== "Inactivo");
-  const inactivos = trabajadores.filter(t => t.estado === "Inactivo");
+  const eliminar = async (id) => { await deleteDoc(doc(db,"trabajadores",id)); setConfirmarEliminar(null); };
+  const activos = trabajadores.filter(t => t.estado!=="Inactivo");
+  const inactivos = trabajadores.filter(t => t.estado==="Inactivo");
 
   return (
     <div>
       <Header title="Trabajadores ☁" onAdd={abrirNuevo} addLabel="+ Añadir trabajador" />
-      {cargandoT ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div> : trabajadores.length === 0 ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Añade el primer trabajador</div> : (
+      {cargandoT ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div> : trabajadores.length===0 ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Añade el primer trabajador</div> : (
         <>
           <div style={{fontSize:12,color:COLORS.muted,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Activos ({activos.length})</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14,marginBottom:28}}>
@@ -482,25 +550,25 @@ function Trabajadores({ trabajadores, cargandoT }) {
                   <div><div style={{fontSize:32,marginBottom:4}}>👷</div><div style={{fontWeight:700,fontSize:15}}>{t.nombre}</div><div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>{t.cargo}</div></div>
                   <EstadoBadge estado={t.estado||"Activo"} />
                 </div>
-                {t.telefono && <div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>📱 {t.telefono}</div>}
-                {t.email && <div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>✉ {t.email}</div>}
+                {t.telefono&&<div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>📱 {t.telefono}</div>}
+                {t.email&&<div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>✉ {t.email}</div>}
                 <div style={{display:"flex",gap:8,marginTop:12}}>
-                  <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={() => abrirEditar(t)}>✏ Editar</button>
-                  <button className="btn btn-danger" onClick={() => setConfirmarEliminar(t)}>🗑</button>
+                  <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={()=>abrirEditar(t)}>✏ Editar</button>
+                  <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>
                 </div>
               </div>
             ))}
           </div>
-          {inactivos.length > 0 && <>
+          {inactivos.length>0&&<>
             <div style={{fontSize:12,color:COLORS.muted,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Inactivos ({inactivos.length})</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
-              {inactivos.map(t => (
+              {inactivos.map(t=>(
                 <div key={t.id} className="card" style={{padding:20,opacity:0.6}}>
                   <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{t.nombre}</div>
                   <div style={{fontSize:12,color:COLORS.muted}}>{t.cargo}</div>
                   <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={() => abrirEditar(t)}>✏ Editar</button>
-                    <button className="btn btn-danger" onClick={() => setConfirmarEliminar(t)}>🗑</button>
+                    <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={()=>abrirEditar(t)}>✏ Editar</button>
+                    <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>
                   </div>
                 </div>
               ))}
@@ -508,34 +576,31 @@ function Trabajadores({ trabajadores, cargandoT }) {
           </>}
         </>
       )}
-      {modal && <Modal title={editando?"Editar Trabajador":"Nuevo Trabajador"} onClose={() => setModal(false)}>
+      {modal&&<Modal title={editando?"Editar Trabajador":"Nuevo Trabajador"} onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
-          <div><label>Nombre *</label><input className="input" placeholder="Nombre y apellido" value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})} /></div>
+          <div><label>Nombre *</label><input className="input" value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div><label>Cargo</label><select className="select" style={{width:"100%"}} value={form.cargo} onChange={e => setForm({...form,cargo:e.target.value})}>{["Técnico","Oficial","Ayudante","Jefe de obra","Administrativo","Otro"].map(c=><option key={c}>{c}</option>)}</select></div>
-            <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e => setForm({...form,estado:e.target.value})}><option>Activo</option><option>Inactivo</option></select></div>
+            <div><label>Cargo</label><select className="select" style={{width:"100%"}} value={form.cargo} onChange={e=>setForm({...form,cargo:e.target.value})}>{["Técnico","Oficial","Ayudante","Jefe de obra","Administrativo","Otro"].map(c=><option key={c}>{c}</option>)}</select></div>
+            <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}><option>Activo</option><option>Inactivo</option></select></div>
           </div>
-          <div><label>Teléfono</label><input className="input" placeholder="6XX XXX XXX" value={form.telefono} onChange={e => setForm({...form,telefono:e.target.value})} /></div>
-          <div><label>Email</label><input className="input" placeholder="correo@ejemplo.com" value={form.email} onChange={e => setForm({...form,email:e.target.value})} /></div>
-          <div><label>Notas</label><input className="input" placeholder="Observaciones..." value={form.notas} onChange={e => setForm({...form,notas:e.target.value})} /></div>
+          <div><label>Teléfono</label><input className="input" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
+          <div><label>Email</label><input className="input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+          <div><label>Notas</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-            <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+            <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":editando?"Guardar cambios":"Añadir"}</button>
           </div>
         </div>
       </Modal>}
-      {confirmarEliminar && <Modal title="¿Eliminar?" onClose={() => setConfirmarEliminar(null)}>
+      {confirmarEliminar&&<Modal title="¿Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.nombre}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>Esta acción no se puede deshacer.</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-          <button className="btn btn-ghost" onClick={() => setConfirmarEliminar(null)}>Cancelar</button>
-          <button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={() => eliminar(confirmarEliminar.id)}>Sí, eliminar</button>
-        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
 }
 
-// ─── FICHAJES ────────────────────────────────────────────────────────────────
+// ─── FICHAJES (admin) con horario partido ─────────────────────────────────────
 function Fichajes({ trabajadores, fichajes, cargando }) {
   const [modal, setModal] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -544,94 +609,151 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
   const [filtroTrabajador, setFiltroTrabajador] = useState("Todos");
   const [modalPDF, setModalPDF] = useState(false);
   const [trabajadorPDF, setTrabajadorPDF] = useState("");
-  const nombresActivos = trabajadores.filter(t => t.estado !== "Inactivo").map(t => t.nombre);
+  const [vistaAgrupada, setVistaAgrupada] = useState(true);
+  const nombresActivos = trabajadores.filter(t => t.estado!=="Inactivo").map(t => t.nombre);
   const todosNombres = trabajadores.map(t => t.nombre);
-  const [form, setForm] = useState({ trabajador: nombresActivos[0]||"", fecha: new Date().toISOString().split("T")[0], entrada:"08:00", salida:"", notas:"" });
+  const [form, setForm] = useState({ trabajador:nombresActivos[0]||"", fecha:new Date().toISOString().split("T")[0], entrada:"08:00", salida:"", notas:"" });
 
-  useEffect(() => { if (nombresActivos.length > 0 && !form.trabajador) setForm(f => ({...f, trabajador: nombresActivos[0]})); }, [trabajadores]);
+  useEffect(() => { if (nombresActivos.length>0&&!form.trabajador) setForm(f=>({...f,trabajador:nombresActivos[0]})); }, [trabajadores]);
 
   const guardar = async () => {
-    if (!form.trabajador || !form.fecha || !form.entrada) return;
+    if (!form.trabajador||!form.fecha||!form.entrada) return;
     setGuardando(true);
-    await addDoc(collection(db, "fichajes"), form);
-    setGuardando(false);
-    setModal(false);
+    await addDoc(collection(db,"fichajes"), form);
+    setGuardando(false); setModal(false);
   };
 
-  const eliminar = async (id) => { await deleteDoc(doc(db, "fichajes", id)); setConfirmarEliminar(null); };
+  const eliminar = async (id) => { await deleteDoc(doc(db,"fichajes",id)); setConfirmarEliminar(null); };
+
   const registrarSalida = async (f) => {
-    const ahora = new Date();
-    const salida = `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
-    await updateDoc(doc(db, "fichajes", f.id), { salida });
+    await updateDoc(doc(db,"fichajes",f.id), { salida: horaActual() });
   };
 
-  const lista = fichajes.filter(f => filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador).filter(f => !filtroFecha||f.fecha===filtroFecha);
-  const horasTotal = lista.reduce((s,f) => s + calcMinutos(f.entrada, f.salida), 0);
+  const lista = fichajes
+    .filter(f => filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador)
+    .filter(f => !filtroFecha||f.fecha===filtroFecha);
+
+  const horasTotal = lista.reduce((s,f) => s+calcMinutos(f.entrada,f.salida), 0);
+
+  // Vista agrupada por trabajador+día
+  const grupos = {};
+  lista.forEach(f => {
+    const clave = `${f.trabajador}__${f.fecha}`;
+    if (!grupos[clave]) grupos[clave] = { trabajador:f.trabajador, fecha:f.fecha, tramos:[], totalMins:0 };
+    grupos[clave].tramos.push(f);
+    grupos[clave].totalMins += calcMinutos(f.entrada, f.salida);
+  });
+  const listaAgrupada = Object.values(grupos).sort((a,b) => b.fecha.localeCompare(a.fecha));
 
   return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
         <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Control Horario ☁</h2>
         <div style={{display:"flex",gap:8}}>
-          <button className="btn btn-ghost" onClick={() => { setTrabajadorPDF(todosNombres[0]||""); setModalPDF(true); }}>📄 Informe PDF 4 años</button>
-          <button className="btn btn-primary" onClick={() => setModal(true)}>+ Registrar fichaje</button>
+          <button className="btn btn-ghost" onClick={()=>setVistaAgrupada(!vistaAgrupada)} style={{fontSize:12}}>
+            {vistaAgrupada ? "Vista detallada" : "Vista agrupada"}
+          </button>
+          <button className="btn btn-ghost" onClick={()=>{setTrabajadorPDF(todosNombres[0]||"");setModalPDF(true);}}>📄 PDF 4 años</button>
+          <button className="btn btn-primary" onClick={()=>setModal(true)}>+ Registrar fichaje</button>
         </div>
       </div>
+
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-        <select className="select" value={filtroTrabajador} onChange={e => setFiltroTrabajador(e.target.value)}>
+        <select className="select" value={filtroTrabajador} onChange={e=>setFiltroTrabajador(e.target.value)}>
           <option value="Todos">Todos los trabajadores</option>
-          {nombresActivos.map(t => <option key={t}>{t}</option>)}
+          {nombresActivos.map(t=><option key={t}>{t}</option>)}
         </select>
-        <input className="input" type="date" style={{width:"auto"}} value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} />
-        {filtroFecha && <button className="btn btn-ghost" style={{fontSize:12}} onClick={() => setFiltroFecha("")}>✕ Limpiar</button>}
-        <span style={{marginLeft:"auto",fontFamily:"Rajdhani",fontSize:14,fontWeight:700,color:COLORS.accent}}>Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m</span>
-      </div>
-      <div className="card" style={{overflow:"hidden"}}>
-        {cargando ? <div style={{padding:40,textAlign:"center",color:COLORS.muted}}>Cargando...</div> : lista.length === 0 ? <div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div> : (
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Trabajador","Fecha","Entrada","Salida","Horas","Notas",""].map((h,i)=><th key={i} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
-            <tbody>{lista.map(f=>(
-              <tr key={f.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
-                <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{f.trabajador}</td>
-                <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{f.fecha}</td>
-                <td style={{padding:"12px 16px",fontSize:13,color:COLORS.green}}>{f.entrada}</td>
-                <td style={{padding:"12px 16px",fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}</td>
-                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
-                <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted}}>{f.notas||"—"}</td>
-                <td style={{padding:"12px 16px"}}><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(f)}>🗑</button></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        )}
+        <input className="input" type="date" style={{width:"auto"}} value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} />
+        {filtroFecha&&<button className="btn btn-ghost" style={{fontSize:12}} onClick={()=>setFiltroFecha("")}>✕ Limpiar</button>}
+        <span style={{marginLeft:"auto",fontFamily:"Rajdhani",fontSize:14,fontWeight:700,color:COLORS.accent}}>
+          Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m
+        </span>
       </div>
 
-      {modalPDF && <Modal title="📄 Informe PDF — Últimos 4 años" onClose={() => setModalPDF(false)}>
+      {vistaAgrupada ? (
+        // Vista agrupada por día
+        <div style={{display:"grid",gap:12}}>
+          {listaAgrupada.length===0
+            ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>
+            : listaAgrupada.map(g => (
+              <div key={`${g.trabajador}__${g.fecha}`} className="card" style={{padding:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div>
+                    <span style={{fontWeight:600,fontSize:14}}>{g.trabajador}</span>
+                    <span style={{fontSize:13,color:COLORS.muted,marginLeft:12}}>{g.fecha}</span>
+                  </div>
+                  <span style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,color:COLORS.accent}}>
+                    {Math.floor(g.totalMins/60)}h {g.totalMins%60}m total
+                  </span>
+                </div>
+                <div style={{display:"grid",gap:6}}>
+                  {g.tramos.sort((a,b)=>a.entrada.localeCompare(b.entrada)).map((f,i) => (
+                    <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"6px 12px",background:COLORS.surface,borderRadius:8}}>
+                      <span style={{fontSize:12,color:COLORS.muted,minWidth:55}}>Tramo {i+1}</span>
+                      <span style={{fontSize:13,color:COLORS.green}}>{f.entrada}</span>
+                      <span style={{color:COLORS.muted}}>→</span>
+                      <span style={{fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>
+                        {f.salida || <button className="btn btn-primary" style={{fontSize:11,padding:"2px 8px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}
+                      </span>
+                      {f.salida&&<span style={{fontSize:12,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span>}
+                      {f.notas&&<span style={{fontSize:11,color:COLORS.muted,fontStyle:"italic",flex:1}}>"{f.notas}"</span>}
+                      <button className="btn btn-danger" style={{marginLeft:"auto"}} onClick={()=>setConfirmarEliminar(f)}>🗑</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      ) : (
+        // Vista detallada (tabla)
+        <div className="card" style={{overflow:"hidden"}}>
+          {cargando?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>Cargando...</div>:lista.length===0?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>:(
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Trabajador","Fecha","Entrada","Salida","Horas","Notas",""].map((h,i)=><th key={i} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+              <tbody>{lista.map(f=>(
+                <tr key={f.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
+                  <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{f.trabajador}</td>
+                  <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{f.fecha}</td>
+                  <td style={{padding:"12px 16px",fontSize:13,color:COLORS.green}}>{f.entrada}</td>
+                  <td style={{padding:"12px 16px",fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}</td>
+                  <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
+                  <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted}}>{f.notas||"—"}</td>
+                  <td style={{padding:"12px 16px"}}><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(f)}>🗑</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {modalPDF&&<Modal title="📄 Informe PDF — Últimos 4 años" onClose={()=>setModalPDF(false)}>
         <div style={{display:"grid",gap:16}}>
-          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong> sobre registro horario obligatorio.</div>
-          <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={trabajadorPDF} onChange={e => setTrabajadorPDF(e.target.value)}>{todosNombres.map(t=><option key={t}>{t}</option>)}</select></div>
+          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF con todos los tramos de jornada cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>.</div>
+          <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={trabajadorPDF} onChange={e=>setTrabajadorPDF(e.target.value)}>{todosNombres.map(t=><option key={t}>{t}</option>)}</select></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-            <button className="btn btn-ghost" onClick={() => setModalPDF(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={() => { generarPDFHorario(trabajadorPDF, fichajes); setModalPDF(false); }}>📥 Descargar PDF</button>
+            <button className="btn btn-ghost" onClick={()=>setModalPDF(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={()=>{generarPDFHorario(trabajadorPDF,fichajes);setModalPDF(false);}}>📥 Descargar PDF</button>
           </div>
         </div>
       </Modal>}
 
-      {confirmarEliminar && <Modal title="¿Eliminar fichaje?" onClose={() => setConfirmarEliminar(null)}>
-        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>Esta acción no se puede deshacer.</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={() => setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={() => eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
+      {confirmarEliminar&&<Modal title="¿Eliminar tramo?" onClose={()=>setConfirmarEliminar(null)}>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha} {confirmarEliminar.entrada}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>Esta acción no se puede deshacer.</div></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
 
-      {modal && <Modal title="Registrar Fichaje" onClose={() => setModal(false)}>
+      {modal&&<Modal title="Registrar Fichaje" onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:16}}>
-          <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={form.trabajador} onChange={e => setForm({...form,trabajador:e.target.value})}>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
+          <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={form.trabajador} onChange={e=>setForm({...form,trabajador:e.target.value})}>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e => setForm({...form,fecha:e.target.value})} /></div>
-            <div><label>Entrada</label><input className="input" type="time" value={form.entrada} onChange={e => setForm({...form,entrada:e.target.value})} /></div>
+            <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
+            <div><label>Entrada</label><input className="input" type="time" value={form.entrada} onChange={e=>setForm({...form,entrada:e.target.value})} /></div>
           </div>
-          <div><label>Salida (opcional)</label><input className="input" type="time" value={form.salida} onChange={e => setForm({...form,salida:e.target.value})} /></div>
-          <div><label>Notas</label><input className="input" placeholder="Trabajo realizado..." value={form.notas} onChange={e => setForm({...form,notas:e.target.value})} /></div>
+          <div><label>Salida (opcional)</label><input className="input" type="time" value={form.salida} onChange={e=>setForm({...form,salida:e.target.value})} /></div>
+          <div><label>Notas</label><input className="input" placeholder="Trabajo realizado..." value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-            <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+            <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":"Guardar ☁"}</button>
           </div>
         </div>
@@ -644,20 +766,15 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
 function Encargos({ encargos, setEncargos, trabajadores }) {
   const [modal, setModal] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
-  const nombresActivos = trabajadores.filter(t => t.estado !== "Inactivo").map(t => t.nombre);
+  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
   const [form, setForm] = useState({ titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
 
-  const guardar = () => {
-    setEncargos(prev => [...prev, { ...form, id:Date.now() }]);
-    setModal(false);
-    setForm({ titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
-  };
-
-  const lista = filtro === "Todos" ? encargos : encargos.filter(e => e.estado === filtro);
+  const guardar = () => { setEncargos(prev=>[...prev,{...form,id:Date.now()}]); setModal(false); setForm({titulo:"",cliente:"",asignado:"",prioridad:"Media",estado:"Pendiente",fecha:"",notas:""}); };
+  const lista = filtro==="Todos"?encargos:encargos.filter(e=>e.estado===filtro);
 
   return (
     <div>
-      <Header title="Encargos" onAdd={() => setModal(true)} addLabel="+ Nuevo encargo" />
+      <Header title="Encargos" onAdd={()=>setModal(true)} addLabel="+ Nuevo encargo" />
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
         {["Todos",...ESTADOS_ENCARGO].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
       </div>
@@ -676,9 +793,9 @@ function Encargos({ encargos, setEncargos, trabajadores }) {
           </div>
         ))}
       </div>
-      {modal && <Modal title="Nuevo Encargo" onClose={() => setModal(false)}>
+      {modal&&<Modal title="Nuevo Encargo" onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
-          <div><label>Título</label><input className="input" placeholder="Ej: Instalación split" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
+          <div><label>Título</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Cliente</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
             <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
@@ -703,18 +820,16 @@ function Albaranes({ albaranes, setAlbaranes }) {
   const [form, setForm] = useState({ numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" });
 
   const guardar = () => {
-    const nextNum = `ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`;
-    setAlbaranes(prev => [...prev, { ...form, importe:Number(form.importe), numero:form.numero||nextNum, id:Date.now() }]);
-    setModal(false);
-    setForm({ numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" });
+    const nextNum=`ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`;
+    setAlbaranes(prev=>[...prev,{...form,importe:Number(form.importe),numero:form.numero||nextNum,id:Date.now()}]);
+    setModal(false); setForm({numero:"",cliente:"",fecha:new Date().toISOString().split("T")[0],importe:"",estado:"Borrador",descripcion:""});
   };
-
-  const lista = filtro === "Todos" ? albaranes : albaranes.filter(a => a.estado === filtro);
-  const total = lista.reduce((s,a) => s+a.importe, 0);
+  const lista=filtro==="Todos"?albaranes:albaranes.filter(a=>a.estado===filtro);
+  const total=lista.reduce((s,a)=>s+a.importe,0);
 
   return (
     <div>
-      <Header title="Albaranes" onAdd={() => setModal(true)} addLabel="+ Nuevo albarán" />
+      <Header title="Albaranes" onAdd={()=>setModal(true)} addLabel="+ Nuevo albarán" />
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
         {["Todos",...ESTADOS_ALBARAN].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
         <span style={{marginLeft:"auto",alignSelf:"center",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>Total: {total.toLocaleString()}€</span>
@@ -734,7 +849,7 @@ function Albaranes({ albaranes, setAlbaranes }) {
           ))}</tbody>
         </table>
       </div>
-      {modal && <Modal title="Nuevo Albarán" onClose={() => setModal(false)}>
+      {modal&&<Modal title="Nuevo Albarán" onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Nº Albarán</label><input className="input" placeholder="Auto si vacío" value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
@@ -763,36 +878,29 @@ function Manuales({ onManualesChange }) {
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [marcaAbierta, setMarcaAbierta] = useState(null);
   const [tipoAbierto, setTipoAbierto] = useState(null);
-  const [form, setForm] = useState({ titulo:"", marca:"", tipo:"Instalación", url:"", fecha:new Date().toISOString().split("T")[0] });
+  const [form, setForm] = useState({titulo:"",marca:"",tipo:"Instalación",url:"",fecha:new Date().toISOString().split("T")[0]});
 
   useEffect(() => {
-    const q = query(collection(db, "manuales"), orderBy("fecha", "desc"));
-    return onSnapshot(q, snap => { const d = snap.docs.map(x=>({id:x.id,...x.data()})); setManuales(d); onManualesChange(d); setCargando(false); });
-  }, []);
+    const q=query(collection(db,"manuales"),orderBy("fecha","desc"));
+    return onSnapshot(q,snap=>{const d=snap.docs.map(x=>({id:x.id,...x.data()}));setManuales(d);onManualesChange(d);setCargando(false);});
+  },[]);
 
-  const guardar = async () => {
-    if (!form.titulo||!form.marca) return;
-    setGuardando(true);
-    await addDoc(collection(db,"manuales"),form);
-    setGuardando(false); setModal(false);
-    setForm({titulo:"",marca:"",tipo:"Instalación",url:"",fecha:new Date().toISOString().split("T")[0]});
-  };
-
-  const eliminar = async (id) => { await deleteDoc(doc(db,"manuales",id)); setConfirmarEliminar(null); };
-  const tipoColor = {Instalación:COLORS.accent,Mantenimiento:COLORS.green,Técnico:COLORS.warm,Protocolo:COLORS.yellow,Otro:COLORS.muted};
-  const porMarca = {};
-  const lf = buscar ? manuales.filter(m=>m.titulo.toLowerCase().includes(buscar.toLowerCase())||m.marca.toLowerCase().includes(buscar.toLowerCase())) : manuales;
+  const guardar=async()=>{if(!form.titulo||!form.marca)return;setGuardando(true);await addDoc(collection(db,"manuales"),form);setGuardando(false);setModal(false);setForm({titulo:"",marca:"",tipo:"Instalación",url:"",fecha:new Date().toISOString().split("T")[0]});};
+  const eliminar=async(id)=>{await deleteDoc(doc(db,"manuales",id));setConfirmarEliminar(null);};
+  const tipoColor={Instalación:COLORS.accent,Mantenimiento:COLORS.green,Técnico:COLORS.warm,Protocolo:COLORS.yellow,Otro:COLORS.muted};
+  const porMarca={};
+  const lf=buscar?manuales.filter(m=>m.titulo.toLowerCase().includes(buscar.toLowerCase())||m.marca.toLowerCase().includes(buscar.toLowerCase())):manuales;
   lf.forEach(m=>{if(!porMarca[m.marca])porMarca[m.marca]={};if(!porMarca[m.marca][m.tipo])porMarca[m.marca][m.tipo]=[];porMarca[m.marca][m.tipo].push(m);});
-  const marcas = Object.keys(porMarca).sort();
+  const marcas=Object.keys(porMarca).sort();
 
   return (
     <div>
-      <Header title="Biblioteca de Manuales ☁" onAdd={() => setModal(true)} addLabel="+ Añadir manual" />
+      <Header title="Biblioteca de Manuales ☁" onAdd={()=>setModal(true)} addLabel="+ Añadir manual" />
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
         <input className="input" placeholder="🔍 Buscar..." value={buscar} onChange={e=>{setBuscar(e.target.value);setMarcaAbierta(null);setTipoAbierto(null);}} style={{maxWidth:400}} />
-        <span style={{fontSize:12,color:COLORS.green}}>✓ Sincronizado con la nube</span>
+        <span style={{fontSize:12,color:COLORS.green}}>✓ Nube</span>
       </div>
-      {cargando ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div> : marcas.length===0 ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>{buscar?"Sin resultados":"Añade el primer manual"}</div> : buscar ? (
+      {cargando?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div>:marcas.length===0?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>{buscar?"Sin resultados":"Añade el primer manual"}</div>:buscar?(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
           {lf.map(m=><div key={m.id} className="card" style={{padding:18,borderTop:`3px solid ${tipoColor[m.tipo]||COLORS.muted}`}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span className="badge" style={{background:`${tipoColor[m.tipo]}22`,color:tipoColor[m.tipo]||COLORS.muted}}>{m.tipo}</span><span style={{fontSize:11,color:COLORS.muted}}>{m.marca}</span></div>
@@ -803,17 +911,17 @@ function Manuales({ onManualesChange }) {
             </div>
           </div>)}
         </div>
-      ) : (
+      ):(
         <div className="card" style={{padding:8}}>
           {marcas.map(marca=>{
-            const mo=marcaAbierta===marca; const tipos=Object.keys(porMarca[marca]).sort(); const tot=Object.values(porMarca[marca]).reduce((s,a)=>s+a.length,0);
+            const mo=marcaAbierta===marca;const tipos=Object.keys(porMarca[marca]).sort();const tot=Object.values(porMarca[marca]).reduce((s,a)=>s+a.length,0);
             return <div key={marca}>
               <div className="folder-row" onClick={()=>{setMarcaAbierta(mo?null:marca);setTipoAbierto(null);}}>
                 <span style={{fontSize:18}}>{mo?"📂":"📁"}</span><span style={{fontWeight:600,fontSize:14,flex:1}}>{marca}</span>
                 <span style={{fontSize:12,color:COLORS.muted}}>{tot} manual{tot!==1?"es":""}</span><span style={{color:COLORS.muted,fontSize:12,marginLeft:8}}>{mo?"▲":"▼"}</span>
               </div>
               {mo&&<div style={{paddingLeft:24}}>{tipos.map(tipo=>{
-                const to=tipoAbierto===`${marca}-${tipo}`; const items=porMarca[marca][tipo];
+                const to=tipoAbierto===`${marca}-${tipo}`;const items=porMarca[marca][tipo];
                 return <div key={tipo}>
                   <div className="folder-row" onClick={()=>setTipoAbierto(to?null:`${marca}-${tipo}`)}>
                     <span style={{fontSize:16}}>{to?"📂":"📁"}</span><span style={{fontSize:13,flex:1,color:tipoColor[tipo]||COLORS.muted}}>{tipo}</span>
@@ -835,13 +943,13 @@ function Manuales({ onManualesChange }) {
           })}
         </div>
       )}
-      {confirmarEliminar&&<Modal title="¿Eliminar manual?" onClose={()=>setConfirmarEliminar(null)}>
-        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>Esta acción no se puede deshacer.</div></div>
+      {confirmarEliminar&&<Modal title="¿Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
       {modal&&<Modal title="Añadir Manual" onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
-          <div><label>Título *</label><input className="input" placeholder="Ej: Manual Daikin..." value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
+          <div><label>Título *</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Marca *</label><input className="input" value={form.marca} onChange={e=>setForm({...form,marca:e.target.value})} /></div>
             <div><label>Tipo</label><select className="select" style={{width:"100%"}} value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value})}>{["Instalación","Mantenimiento","Técnico","Protocolo","Otro"].map(t=><option key={t}>{t}</option>)}</select></div>
@@ -857,18 +965,18 @@ function Manuales({ onManualesChange }) {
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 function Dashboard({ data, manuales, fichajes, trabajadores }) {
-  const hoy = new Date().toISOString().split("T")[0];
-  const fichajesHoy = fichajes.filter(f => f.fecha === hoy).length;
-  const encargosActivos = data.encargos.filter(e => e.estado==="En curso"||e.estado==="Pendiente").length;
-  const totalFacturado = data.albaranes.filter(a => a.estado==="Cobrado").reduce((s,a) => s+a.importe, 0);
-  const stats = [
+  const hoy=new Date().toISOString().split("T")[0];
+  const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
+  const encargosActivos=data.encargos.filter(e=>e.estado==="En curso"||e.estado==="Pendiente").length;
+  const totalFacturado=data.albaranes.filter(a=>a.estado==="Cobrado").reduce((s,a)=>s+a.importe,0);
+  const stats=[
     {label:"Trabajadores activos",value:trabajadores.filter(t=>t.estado!=="Inactivo").length,color:COLORS.accent,icon:"👷"},
-    {label:"Fichajes hoy",value:fichajesHoy,color:COLORS.green,icon:"⏱"},
+    {label:"Trabajadores fichados hoy",value:fichajesHoy,color:COLORS.green,icon:"⏱"},
     {label:"Encargos activos",value:encargosActivos,color:COLORS.warm,icon:"🔧"},
     {label:"Facturado (cobrado)",value:`${totalFacturado.toLocaleString()}€`,color:COLORS.yellow,icon:"💶"},
   ];
-  const urgentes = data.encargos.filter(e => e.prioridad==="Urgente"&&e.estado!=="Completado");
-  const fichajesHoyList = fichajes.filter(f => f.fecha===hoy).slice(0,4);
+  const urgentes=data.encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado");
+  const fichajesHoyList=fichajes.filter(f=>f.fecha===hoy).slice(0,6);
 
   return (
     <div>
@@ -884,9 +992,9 @@ function Dashboard({ data, manuales, fichajes, trabajadores }) {
         <div className="card" style={{padding:20}}>
           <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.accent}}>⏱ Fichajes de hoy</div>
           {fichajesHoyList.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sin fichajes hoy</div>:fichajesHoyList.map(f=>(
-            <div key={f.id} style={{padding:"8px 0",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between"}}>
-              <div style={{fontSize:13,fontWeight:500}}>{f.trabajador}</div>
-              <div style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."} <span style={{color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span></div>
+            <div key={f.id} style={{padding:"6px 0",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:13,fontWeight:500}}>{f.trabajador}</span>
+              <span style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."} <span style={{color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span></span>
             </div>
           ))}
         </div>
@@ -926,37 +1034,33 @@ export default function App() {
   const [trabajadores, setTrabajadores] = useState([]);
   const [cargandoT, setCargandoT] = useState(true);
 
-  const setAlbaranes = fn => setData(d => ({...d, albaranes:fn(d.albaranes)}));
-  const setEncargos = fn => setData(d => ({...d, encargos:fn(d.encargos)}));
+  const setAlbaranes = fn => setData(d=>({...d,albaranes:fn(d.albaranes)}));
+  const setEncargos = fn => setData(d=>({...d,encargos:fn(d.encargos)}));
 
-  // Escuchar cambios de autenticación
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUsuario(u);
-        const snap = await getDoc(doc(db, "usuarios", u.uid));
+        const snap = await getDoc(doc(db,"usuarios",u.uid));
         if (snap.exists()) setUsuarioInfo(snap.data());
-      } else {
-        setUsuario(null);
-        setUsuarioInfo(null);
-      }
+      } else { setUsuario(null); setUsuarioInfo(null); }
       setCargandoAuth(false);
     });
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db,"fichajes"), orderBy("fecha","desc"));
-    return onSnapshot(q, snap => setFichajes(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const q=query(collection(db,"fichajes"),orderBy("fecha","desc"));
+    return onSnapshot(q,snap=>setFichajes(snap.docs.map(d=>({id:d.id,...d.data()}))));
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db,"trabajadores"), orderBy("nombre"));
-    return onSnapshot(q, snap => { setTrabajadores(snap.docs.map(d=>({id:d.id,...d.data()}))); setCargandoT(false); });
+    const q=query(collection(db,"trabajadores"),orderBy("nombre"));
+    return onSnapshot(q,snap=>{setTrabajadores(snap.docs.map(d=>({id:d.id,...d.data()})));setCargandoT(false);});
   }, []);
 
-  if (cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted}}>Cargando...</div>;
+  if (cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"Inter"}}>Cargando...</div>;
   if (!usuario) return <Login />;
-  if (usuarioInfo?.rol === "trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={data.encargos} />;
+  if (usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={data.encargos} />;
 
   return (
     <>
@@ -965,7 +1069,7 @@ export default function App() {
         <div style={{width:220,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,padding:"24px 0",display:"flex",flexDirection:"column",flexShrink:0}}>
           <div style={{padding:"0 20px 28px",borderBottom:`1px solid ${COLORS.border}`}}>
             <div style={{fontFamily:"Rajdhani",fontSize:20,fontWeight:700,color:COLORS.accent,letterSpacing:1}}>❄ ClimaPro</div>
-            <div style={{fontSize:11,color:COLORS.muted,marginTop:3}}>👑 {usuarioInfo?.nombre || "Admin"}</div>
+            <div style={{fontSize:11,color:COLORS.muted,marginTop:3}}>👑 {usuarioInfo?.nombre||"Admin"}</div>
           </div>
           <nav style={{padding:"16px 0",flex:1}}>
             {NAV_ITEMS.map(item=>(
@@ -981,7 +1085,7 @@ export default function App() {
             ))}
           </nav>
           <div style={{padding:"16px 20px",borderTop:`1px solid ${COLORS.border}`}}>
-            <button className="btn btn-ghost" style={{width:"100%",fontSize:12}} onClick={() => signOut(auth)}>Cerrar sesión</button>
+            <button className="btn btn-ghost" style={{width:"100%",fontSize:12}} onClick={()=>signOut(auth)}>Cerrar sesión</button>
           </div>
         </div>
         <div style={{flex:1,padding:32,overflowY:"auto",maxHeight:"100vh"}}>
