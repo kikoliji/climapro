@@ -46,11 +46,6 @@ const STYLE = `
 const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
 const ESTADOS_ENCARGO = ["Pendiente", "En curso", "Completado", "Cancelado"];
 
-const initialAlbaranes = [
-  { id: 1, numero: "ALB-2026-001", cliente: "Hotel Sol & Mar", fecha: "2026-04-05", importe: 1840, estado: "Cobrado", descripcion: "Mantenimiento anual 4 unidades" },
-  { id: 2, numero: "ALB-2026-002", cliente: "Oficinas Central SA", fecha: "2026-04-07", importe: 3200, estado: "Enviado", descripcion: "Instalación sistema VRV" },
-];
-
 function calcHoras(entrada, salida) {
   if (!entrada || !salida) return "-";
   const [h1, m1] = entrada.split(":").map(Number);
@@ -86,9 +81,8 @@ function obtenerUbicacion() {
 
 function LinkMapa({ lat, lng, precision }) {
   if (!lat || !lng) return <span style={{ fontSize:11, color:COLORS.muted }}>Sin ubicación</span>;
-  const url = `https://www.google.com/maps?q=${lat},${lng}`;
   return (
-    <a href={url} target="_blank" rel="noreferrer"
+    <a href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noreferrer"
       style={{ fontSize:11, color:COLORS.accent, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4 }}>
       📍 Ver mapa {precision ? `(±${precision}m)` : ""}
     </a>
@@ -214,7 +208,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
 
   const misUltimos = fichajes.filter(f => f.trabajador === usuarioInfo.nombre).slice(0, 20);
   const misEncargos = encargos.filter(e => e.asignado === usuarioInfo.nombre && e.estado !== "Completado" && e.estado !== "Cancelado");
-
   const ultimoTramo = misFichajesHoy[misFichajesHoy.length - 1];
   const hayTramoAbierto = ultimoTramo != null && (!ultimoTramo.salida || ultimoTramo.salida === "");
   const totalHoyMins = misFichajesHoy.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
@@ -228,8 +221,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
       entrada: horaActual(), salida: "", notas: "",
       tramo: misFichajesHoy.length + 1, ubicacionEntrada: ubicacion,
     });
-    setFichando(false);
-    setTimeout(() => setMensajeGPS(""), 3000);
+    setFichando(false); setTimeout(() => setMensajeGPS(""), 3000);
   };
 
   const ficharSalida = async () => {
@@ -238,8 +230,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
     const ubicacion = await obtenerUbicacion();
     setMensajeGPS(ubicacion ? "📍 Ubicación registrada" : "⚠ No se pudo obtener ubicación");
     await updateDoc(doc(db, "fichajes", ultimoTramo.id), { salida: horaActual(), ubicacionSalida: ubicacion });
-    setFichando(false);
-    setTimeout(() => setMensajeGPS(""), 3000);
+    setFichando(false); setTimeout(() => setMensajeGPS(""), 3000);
   };
 
   const porFecha = {};
@@ -667,19 +658,14 @@ function Encargos({ trabajadores }) {
 
   const abrirNuevo = () => { setEditando(null); setForm(emptyForm); setModal(true); };
   const abrirEditar = (e) => { setEditando(e); setForm({ titulo:e.titulo, cliente:e.cliente, asignado:e.asignado||"", prioridad:e.prioridad, estado:e.estado, fecha:e.fecha, notas:e.notas||"" }); setModal(true); };
-
   const guardar = async () => {
-    if (!form.titulo) return;
-    setGuardando(true);
+    if (!form.titulo) return; setGuardando(true);
     if (editando) await updateDoc(doc(db,"encargos",editando.id), form);
     else await addDoc(collection(db,"encargos"), form);
     setGuardando(false); setModal(false);
   };
-
   const eliminar = async (id) => { await deleteDoc(doc(db,"encargos",id)); setConfirmarEliminar(null); };
-
   const cambiarEstado = async (id, estado) => { await updateDoc(doc(db,"encargos",id), { estado }); };
-
   const lista = filtro==="Todos" ? encargos : encargos.filter(e=>e.estado===filtro);
 
   return (
@@ -715,40 +701,25 @@ function Encargos({ trabajadores }) {
           </div>
         </>
       )}
-
       {modal&&<Modal title={editando?"Editar Encargo":"Nuevo Encargo"} onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
-          <div><label>Título *</label><input className="input" placeholder="Ej: Instalación split - Cliente X" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
+          <div><label>Título *</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Cliente</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
             <div><label>Fecha prevista</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-            <div><label>Asignado</label>
-              <select className="select" style={{width:"100%"}} value={form.asignado} onChange={e=>setForm({...form,asignado:e.target.value})}>
-                <option value="">Sin asignar</option>
-                {nombresActivos.map(t=><option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div><label>Prioridad</label>
-              <select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>
-                {["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}
-              </select>
-            </div>
-            <div><label>Estado</label>
-              <select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
-                {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
-              </select>
-            </div>
+            <div><label>Asignado</label><select className="select" style={{width:"100%"}} value={form.asignado} onChange={e=>setForm({...form,asignado:e.target.value})}><option value="">Sin asignar</option>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
+            <div><label>Prioridad</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}</select></div>
+            <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
-          <div><label>Notas</label><input className="input" placeholder="Observaciones, acceso, materiales..." value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
+          <div><label>Notas</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":editando?"Guardar cambios":"Crear encargo"}</button>
           </div>
         </div>
       </Modal>}
-
       {confirmarEliminar&&<Modal title="¿Eliminar encargo?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
@@ -757,56 +728,91 @@ function Encargos({ trabajadores }) {
   );
 }
 
-// ─── ALBARANES ───────────────────────────────────────────────────────────────
-function Albaranes({ albaranes, setAlbaranes }) {
+// ─── ALBARANES con Firebase ───────────────────────────────────────────────────
+function Albaranes({ albaranes, totalAlbaranes }) {
   const [modal, setModal] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [guardando, setGuardando] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
-  const [form, setForm] = useState({ numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" });
+  const emptyForm = { numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" };
+  const [form, setForm] = useState(emptyForm);
 
-  const guardar = () => {
-    const nextNum=`ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`;
-    setAlbaranes(prev=>[...prev,{...form,importe:Number(form.importe),numero:form.numero||nextNum,id:Date.now()}]);
-    setModal(false); setForm({numero:"",cliente:"",fecha:new Date().toISOString().split("T")[0],importe:"",estado:"Borrador",descripcion:""});
+  const abrirNuevo = () => { setEditando(null); setForm(emptyForm); setModal(true); };
+  const abrirEditar = (a) => { setEditando(a); setForm({ numero:a.numero, cliente:a.cliente, fecha:a.fecha, importe:String(a.importe), estado:a.estado, descripcion:a.descripcion||"" }); setModal(true); };
+
+  const guardar = async () => {
+    if (!form.cliente) return; setGuardando(true);
+    const nextNum = `ALB-${new Date().getFullYear()}-${String(totalAlbaranes+1).padStart(3,"0")}`;
+    const datos = { ...form, importe: Number(form.importe), numero: form.numero || nextNum };
+    if (editando) await updateDoc(doc(db,"albaranes",editando.id), datos);
+    else await addDoc(collection(db,"albaranes"), datos);
+    setGuardando(false); setModal(false);
   };
-  const lista=filtro==="Todos"?albaranes:albaranes.filter(a=>a.estado===filtro);
-  const total=lista.reduce((s,a)=>s+a.importe,0);
+
+  const eliminar = async (id) => { await deleteDoc(doc(db,"albaranes",id)); setConfirmarEliminar(null); };
+  const cambiarEstado = async (id, estado) => { await updateDoc(doc(db,"albaranes",id), { estado }); };
+
+  const lista = filtro==="Todos" ? albaranes : albaranes.filter(a=>a.estado===filtro);
+  const total = lista.reduce((s,a)=>s+a.importe, 0);
 
   return (
     <div>
-      <Header title="Albaranes" onAdd={()=>setModal(true)} addLabel="+ Nuevo albarán" />
+      <Header title="Albaranes ☁" onAdd={abrirNuevo} addLabel="+ Nuevo albarán" />
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
         {["Todos",...ESTADOS_ALBARAN].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
         <span style={{marginLeft:"auto",alignSelf:"center",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>Total: {total.toLocaleString()}€</span>
       </div>
       <div className="card" style={{overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Número","Cliente","Descripción","Fecha","Importe","Estado"].map(h=><th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
-          <tbody>{lista.map(a=>(
-            <tr key={a.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
-              <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{a.numero}</td>
-              <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{a.cliente}</td>
-              <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted,maxWidth:200}}>{a.descripcion}</td>
-              <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{a.fecha}</td>
-              <td style={{padding:"12px 16px",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>{a.importe.toLocaleString()}€</td>
-              <td style={{padding:"12px 16px"}}><select className="select" style={{fontSize:12,padding:"4px 8px"}} value={a.estado} onChange={ev=>setAlbaranes(prev=>prev.map(x=>x.id===a.id?{...x,estado:ev.target.value}:x))}>{ESTADOS_ALBARAN.map(s=><option key={s}>{s}</option>)}</select></td>
-            </tr>
-          ))}</tbody>
-        </table>
+        {lista.length===0 ? <div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay albaranes</div> : (
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Número","Cliente","Descripción","Fecha","Importe","Estado",""].map(h=><th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+            <tbody>{lista.map(a=>(
+              <tr key={a.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
+                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{a.numero}</td>
+                <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{a.cliente}</td>
+                <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted,maxWidth:200}}>{a.descripcion}</td>
+                <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{a.fecha}</td>
+                <td style={{padding:"12px 16px",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>{a.importe.toLocaleString()}€</td>
+                <td style={{padding:"12px 16px"}}>
+                  <select className="select" style={{fontSize:12,padding:"4px 8px"}} value={a.estado} onChange={ev=>cambiarEstado(a.id,ev.target.value)}>
+                    {ESTADOS_ALBARAN.map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:"12px 16px"}}>
+                  <div style={{display:"flex",gap:6}}>
+                    <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(a)}>✏</button>
+                    <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(a)}>🗑</button>
+                  </div>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
       </div>
-      {modal&&<Modal title="Nuevo Albarán" onClose={()=>setModal(false)}>
+
+      {modal&&<Modal title={editando?"Editar Albarán":"Nuevo Albarán"} onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Nº Albarán</label><input className="input" placeholder="Auto si vacío" value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
             <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
           </div>
-          <div><label>Cliente</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
+          <div><label>Cliente *</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
           <div><label>Descripción</label><input className="input" value={form.descripcion} onChange={e=>setForm({...form,descripcion:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Importe (€)</label><input className="input" type="number" value={form.importe} onChange={e=>setForm({...form,importe:e.target.value})} /></div>
             <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ALBARAN.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
-          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Crear albarán</button></div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":editando?"Guardar cambios":"Crear albarán"}</button>
+          </div>
         </div>
+      </Modal>}
+
+      {confirmarEliminar&&<Modal title="¿Eliminar albarán?" onClose={()=>setConfirmarEliminar(null)}>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.numero} — {confirmarEliminar.cliente}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
@@ -975,10 +981,10 @@ export default function App() {
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [cargandoAuth, setCargandoAuth] = useState(true);
   const [section, setSection] = useState("dashboard");
-  const [albaranes, setAlbaranes] = useState(initialAlbaranes);
   const [manuales, setManuales] = useState([]);
   const [fichajes, setFichajes] = useState([]);
   const [encargos, setEncargos] = useState([]);
+  const [albaranes, setAlbaranes] = useState([]);
   const [trabajadores, setTrabajadores] = useState([]);
   const [cargandoT, setCargandoT] = useState(true);
 
@@ -1006,6 +1012,11 @@ export default function App() {
   useEffect(() => {
     const q=query(collection(db,"encargos"),orderBy("fecha","desc"));
     return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()}))));
+  }, []);
+
+  useEffect(() => {
+    const q=query(collection(db,"albaranes"),orderBy("fecha","desc"));
+    return onSnapshot(q,snap=>setAlbaranes(snap.docs.map(d=>({id:d.id,...d.data()}))));
   }, []);
 
   if (cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"Inter"}}>Cargando...</div>;
@@ -1044,7 +1055,7 @@ export default function App() {
           {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT}/>}
           {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
           {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
-          {section==="albaranes"&&<Albaranes albaranes={albaranes} setAlbaranes={setAlbaranes}/>}
+          {section==="albaranes"&&<Albaranes albaranes={albaranes} totalAlbaranes={albaranes.length}/>}
           {section==="manuales"&&<Manuales onManualesChange={setManuales}/>}
         </div>
       </div>
