@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import axios from "axios";
 
 const COLORS = {
   bg: "#0f1117", surface: "#1a1d27", card: "#1e2130", border: "#2a2d3e",
@@ -17,6 +18,11 @@ const COLORS = {
   warm: "#ff6b35", green: "#00e676", yellow: "#ffd600",
   text: "#e8eaf0", muted: "#8b8fa8", danger: "#ff4757",
 };
+
+// ─── CLOUDINARY CONFIG ────────────────────────────────────────────────────────
+const CLOUDINARY_CLOUD = "dekjrcfef";
+const CLOUDINARY_PRESET = "climapro";
+const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`;
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap');
@@ -89,6 +95,15 @@ function LinkMapa({ lat, lng, precision }) {
   );
 }
 
+// ─── SUBIR FOTO A CLOUDINARY ──────────────────────────────────────────────────
+async function subirFoto(archivo) {
+  const formData = new FormData();
+  formData.append("file", archivo);
+  formData.append("upload_preset", CLOUDINARY_PRESET);
+  const res = await axios.post(CLOUDINARY_URL, formData);
+  return res.data.secure_url;
+}
+
 function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const ahora = new Date();
@@ -113,16 +128,15 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(50, 50, 50);
   pdf.text(`Nombre: ${trabajador}`, 14, 60);
   pdf.text(`Período: ${hace4años.toLocaleDateString("es-ES")} — ${ahora.toLocaleDateString("es-ES")}`, 14, 67);
-  pdf.text(`Total tramos: ${registros.length} | Días: ${Object.keys(porDia).length}`, 14, 74);
   const totalMins = registros.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
   pdf.text(`Total horas: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 120, 60);
   pdf.text(`Generado: ${ahora.toLocaleDateString("es-ES")} ${ahora.toLocaleTimeString("es-ES")}`, 120, 67);
   pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 30, 30);
-  pdf.text("REGISTROS DE JORNADA", 14, 85); pdf.line(14, 87, 196, 87);
+  pdf.text("REGISTROS DE JORNADA", 14, 80); pdf.line(14, 82, 196, 82);
 
   if (registros.length === 0) {
     pdf.setFont("helvetica", "italic"); pdf.setFontSize(10); pdf.setTextColor(150, 150, 150);
-    pdf.text("No hay registros en el período seleccionado.", 14, 97);
+    pdf.text("No hay registros.", 14, 92);
   } else {
     const rows = [];
     Object.entries(porDia).forEach(([fecha, tramos]) => {
@@ -139,7 +153,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
       });
     });
     autoTable(pdf, {
-      startY: 92,
+      startY: 87,
       head: [["Fecha","Día","T.","Entrada","Salida","Horas","Total día","GPS entrada"]],
       body: rows,
       headStyles: { fillColor:[15,17,23], textColor:[0,196,255], fontStyle:"bold", fontSize:7 },
@@ -196,10 +210,49 @@ function Login() {
   );
 }
 
+// ─── MODAL ───────────────────────────────────────────────────────────────────
+function Modal({ title, onClose, children, wide }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}>
+      <div className="card" style={{ width:"100%", maxWidth: wide ? 700 : 520, padding:24, margin:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
+          <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EstadoBadge({ estado }) {
+  const colors = {
+    Cobrado:{bg:"rgba(0,230,118,.15)",color:COLORS.green}, Enviado:{bg:"rgba(0,196,255,.15)",color:COLORS.accent},
+    Borrador:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Pendiente:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
+    "En curso":{bg:"rgba(0,196,255,.15)",color:COLORS.accent}, Completado:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
+    Cancelado:{bg:"rgba(255,71,87,.15)",color:COLORS.danger}, Urgente:{bg:"rgba(255,71,87,.2)",color:COLORS.danger},
+    Alta:{bg:"rgba(255,107,53,.2)",color:COLORS.warm}, Media:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
+    Baja:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Activo:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
+    Inactivo:{bg:"rgba(139,143,168,.15)",color:COLORS.muted},
+  };
+  const c = colors[estado]||{bg:"rgba(139,143,168,.15)",color:COLORS.muted};
+  return <span className="badge" style={{background:c.bg,color:c.color}}>{estado}</span>;
+}
+
+function Header({ title, onAdd, addLabel }) {
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+      <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>{title}</h2>
+      {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
+    </div>
+  );
+}
+
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const [fichando, setFichando] = useState(false);
   const [mensajeGPS, setMensajeGPS] = useState("");
+  const [encargoSeleccionado, setEncargoSeleccionado] = useState(null);
   const hoy = new Date().toISOString().split("T")[0];
 
   const misFichajesHoy = fichajes
@@ -207,7 +260,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
     .sort((a, b) => (a.entrada||"").localeCompare(b.entrada||""));
 
   const misUltimos = fichajes.filter(f => f.trabajador === usuarioInfo.nombre).slice(0, 20);
-  const misEncargos = encargos.filter(e => e.asignado === usuarioInfo.nombre && e.estado !== "Completado" && e.estado !== "Cancelado");
+  const misEncargos = encargos.filter(e => e.asignado === usuarioInfo.nombre && e.estado !== "Cancelado");
+
   const ultimoTramo = misFichajesHoy[misFichajesHoy.length - 1];
   const hayTramoAbierto = ultimoTramo != null && (!ultimoTramo.salida || ultimoTramo.salida === "");
   const totalHoyMins = misFichajesHoy.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
@@ -236,6 +290,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const porFecha = {};
   misUltimos.forEach(f => { if (!porFecha[f.fecha]) porFecha[f.fecha] = []; porFecha[f.fecha].push(f); });
 
+  const colorEstado = { "Pendiente": COLORS.yellow, "En curso": COLORS.accent, "Completado": COLORS.green, "Cancelado": COLORS.danger };
+
   return (
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
       <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}`, padding:"16px 24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -245,7 +301,9 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => signOut(auth)}>Salir</button>
         </div>
       </div>
-      <div style={{ padding:24, maxWidth:800, margin:"0 auto" }}>
+
+      <div style={{ padding:24, maxWidth:860, margin:"0 auto" }}>
+        {/* FICHAR */}
         <div className="card" style={{ padding:28, marginBottom:24, borderTop:`3px solid ${COLORS.accent}` }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
             <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700 }}>
@@ -283,79 +341,176 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             {misFichajesHoy.length === 0 && !fichando && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>📍 Se registrará tu ubicación al fichar</div>}
           </div>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-          <div className="card" style={{ padding:20 }}>
-            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
-            {misEncargos.length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos asignados</div>
-              : misEncargos.map(e => (
-                <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize:13, fontWeight:600 }}>{e.titulo}</div>
-                  <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>{e.cliente} · {e.fecha}</div>
-                  <div style={{ marginTop:4 }}><span className="badge" style={{ background:"rgba(255,107,53,.2)", color:COLORS.warm }}>{e.prioridad}</span></div>
-                </div>
-              ))}
-          </div>
-          <div className="card" style={{ padding:20 }}>
-            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
-            {Object.keys(porFecha).length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
-              : Object.entries(porFecha).slice(0, 5).map(([fecha, tramos]) => {
-                const totalDia = tramos.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
-                return (
-                  <div key={fecha} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}` }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                      <span style={{ fontSize:12, fontWeight:600 }}>{fecha}</span>
-                      <span style={{ fontSize:12, color:COLORS.accent }}>{Math.floor(totalDia/60)}h {totalDia%60}m</span>
-                    </div>
-                    {tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f, i) => (
-                      <div key={f.id} style={{ fontSize:11, color:COLORS.muted, paddingLeft:8 }}>
-                        Tramo {i+1}: {f.entrada} → {f.salida||"—"} {f.salida?`(${calcHoras(f.entrada,f.salida)})` : ""}
-                      </div>
-                    ))}
+
+        {/* ENCARGOS */}
+        <div className="card" style={{ padding:20, marginBottom:24 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
+          {misEncargos.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos asignados</div>
+            : misEncargos.map(e => (
+              <div key={e.id} style={{ padding:"14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                    <EstadoBadge estado={e.prioridad} />
+                    <EstadoBadge estado={e.estado} />
                   </div>
-                );
-              })}
+                  <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>{e.titulo}</div>
+                  <div style={{ fontSize:12, color:COLORS.muted }}>{e.cliente} · {e.fecha}</div>
+                  {e.notasTrabajador && (
+                    <div style={{ fontSize:12, color:COLORS.yellow, marginTop:6, background:"rgba(255,214,0,.08)", padding:"6px 10px", borderRadius:6 }}>
+                      ⚠ Falta: {e.notasTrabajador}
+                    </div>
+                  )}
+                  {e.fotos && e.fotos.length > 0 && (
+                    <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                      {e.fotos.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer">
+                          <img src={url} alt={`foto ${i+1}`} style={{ width:60, height:60, objectFit:"cover", borderRadius:6, border:`1px solid ${COLORS.border}` }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="btn btn-ghost" style={{ fontSize:12, whiteSpace:"nowrap" }} onClick={() => setEncargoSeleccionado(e)}>
+                  ✏ Gestionar
+                </button>
+              </div>
+            ))
+          }
+        </div>
+
+        {/* HISTORIAL */}
+        <div className="card" style={{ padding:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
+          {Object.keys(porFecha).length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
+            : Object.entries(porFecha).slice(0, 5).map(([fecha, tramos]) => {
+              const totalDia = tramos.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
+              return (
+                <div key={fecha} style={{ padding:"8px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:12, fontWeight:600 }}>{fecha}</span>
+                    <span style={{ fontSize:12, color:COLORS.accent }}>{Math.floor(totalDia/60)}h {totalDia%60}m</span>
+                  </div>
+                  {tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f, i) => (
+                    <div key={f.id} style={{ fontSize:11, color:COLORS.muted, paddingLeft:8 }}>
+                      Tramo {i+1}: {f.entrada} → {f.salida||"—"} {f.salida?`(${calcHoras(f.entrada,f.salida)})` : ""}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+        </div>
+      </div>
+
+      {/* MODAL GESTIONAR ENCARGO */}
+      {encargoSeleccionado && (
+        <GestionarEncargo
+          encargo={encargoSeleccionado}
+          onClose={() => setEncargoSeleccionado(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── GESTIONAR ENCARGO (trabajador) ──────────────────────────────────────────
+function GestionarEncargo({ encargo, onClose }) {
+  const [estado, setEstado] = useState(encargo.estado);
+  const [notas, setNotas] = useState(encargo.notasTrabajador || "");
+  const [fotos, setFotos] = useState(encargo.fotos || []);
+  const [subiendo, setSubiendo] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [progreso, setProgreso] = useState("");
+
+  const subirFotos = async (archivos) => {
+    setSubiendo(true);
+    const urls = [...fotos];
+    for (let i = 0; i < archivos.length; i++) {
+      setProgreso(`Subiendo foto ${i+1} de ${archivos.length}...`);
+      const url = await subirFoto(archivos[i]);
+      urls.push(url);
+    }
+    setFotos(urls);
+    setSubiendo(false);
+    setProgreso("");
+  };
+
+  const guardar = async () => {
+    setGuardando(true);
+    await updateDoc(doc(db, "encargos", encargo.id), {
+      estado,
+      notasTrabajador: notas,
+      fotos,
+    });
+    setGuardando(false);
+    onClose();
+  };
+
+  return (
+    <Modal title={`Gestionar: ${encargo.titulo}`} onClose={onClose} wide>
+      <div style={{ display:"grid", gap:16 }}>
+        <div style={{ background:COLORS.surface, padding:12, borderRadius:8 }}>
+          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:4 }}>Cliente: {encargo.cliente} · Fecha: {encargo.fecha}</div>
+          {encargo.notas && <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic" }}>Nota admin: "{encargo.notas}"</div>}
+        </div>
+
+        {/* Estado */}
+        <div>
+          <label>Estado del encargo</label>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {["Pendiente","En curso","Completado"].map(s => (
+              <button key={s} className="btn" onClick={() => setEstado(s)}
+                style={{ background: estado===s ? (s==="Completado"?COLORS.green:s==="En curso"?COLORS.accent:COLORS.yellow) : COLORS.surface,
+                  color: estado===s ? "#000" : COLORS.muted,
+                  border:`1px solid ${estado===s?(s==="Completado"?COLORS.green:s==="En curso"?COLORS.accent:COLORS.yellow):COLORS.border}` }}>
+                {s==="Pendiente"?"⏳ Pendiente":s==="En curso"?"🔄 En curso":"✅ Completado"}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-// ─── MODAL ───────────────────────────────────────────────────────────────────
-function Modal({ title, onClose, children }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div className="card" style={{ width:"100%", maxWidth:520, padding:24 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
-          <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
+        {/* Notas materiales */}
+        <div>
+          <label>⚠ Materiales o recambios que faltan</label>
+          <textarea
+            className="input"
+            placeholder="Ej: Falta válvula de expansión, filtro G4, cable de 3x2.5..."
+            value={notas}
+            onChange={e => setNotas(e.target.value)}
+            style={{ minHeight:80, resize:"vertical" }}
+          />
         </div>
-        {children}
+
+        {/* Fotos */}
+        <div>
+          <label>📷 Fotos del trabajo realizado</label>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+            {fotos.map((url, i) => (
+              <div key={i} style={{ position:"relative" }}>
+                <img src={url} alt={`foto ${i+1}`} style={{ width:80, height:80, objectFit:"cover", borderRadius:8, border:`1px solid ${COLORS.border}` }} />
+                <button onClick={() => setFotos(fotos.filter((_,j)=>j!==i))}
+                  style={{ position:"absolute", top:-6, right:-6, background:COLORS.danger, border:"none", borderRadius:"50%", width:20, height:20, cursor:"pointer", color:"#fff", fontSize:10, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+            <label htmlFor="foto-input" className="btn btn-ghost" style={{ cursor:"pointer", margin:0 }}>
+              📷 {subiendo ? progreso : "Añadir fotos"}
+            </label>
+            <input id="foto-input" type="file" accept="image/*" multiple style={{ display:"none" }}
+              onChange={e => subirFotos(Array.from(e.target.files))} disabled={subiendo} />
+            <span style={{ fontSize:12, color:COLORS.muted }}>{fotos.length} foto{fotos.length!==1?"s":""} subida{fotos.length!==1?"s":""}</span>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={guardar} disabled={guardando||subiendo}>
+            {guardando ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </div>
       </div>
-    </div>
-  );
-}
-
-function EstadoBadge({ estado }) {
-  const colors = {
-    Cobrado:{bg:"rgba(0,230,118,.15)",color:COLORS.green}, Enviado:{bg:"rgba(0,196,255,.15)",color:COLORS.accent},
-    Borrador:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Pendiente:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    "En curso":{bg:"rgba(0,196,255,.15)",color:COLORS.accent}, Completado:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
-    Cancelado:{bg:"rgba(255,71,87,.15)",color:COLORS.danger}, Urgente:{bg:"rgba(255,71,87,.2)",color:COLORS.danger},
-    Alta:{bg:"rgba(255,107,53,.2)",color:COLORS.warm}, Media:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    Baja:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Activo:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
-    Inactivo:{bg:"rgba(139,143,168,.15)",color:COLORS.muted},
-  };
-  const c = colors[estado]||{bg:"rgba(139,143,168,.15)",color:COLORS.muted};
-  return <span className="badge" style={{background:c.bg,color:c.color}}>{estado}</span>;
-}
-
-function Header({ title, onAdd, addLabel }) {
-  return (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
-      <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>{title}</h2>
-      {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
-    </div>
+    </Modal>
   );
 }
 
@@ -400,7 +555,6 @@ function GestionUsuarios({ trabajadores }) {
       </div>
       {modal && <Modal title="Crear usuario" onClose={() => setModal(false)}>
         <div style={{ display:"grid", gap:14 }}>
-          <div style={{ background:"rgba(0,196,255,0.08)", border:`1px solid ${COLORS.accent}33`, borderRadius:10, padding:12, fontSize:12, color:COLORS.muted }}>El usuario accederá con el email y contraseña que definas aquí.</div>
           <div><label>Trabajador</label>
             <select className="select" style={{ width:"100%" }} value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})}>
               <option value="">Selecciona trabajador</option>
@@ -607,7 +761,6 @@ function Fichajes({ trabajadores, fichajes }) {
       )}
       {modalPDF&&<Modal title="📄 PDF — Últimos 4 años" onClose={()=>setModalPDF(false)}>
         <div style={{display:"grid",gap:16}}>
-          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>PDF con GPS cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>.</div>
           <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={trabajadorPDF} onChange={e=>setTrabajadorPDF(e.target.value)}>{todosNombres.map(t=><option key={t}>{t}</option>)}</select></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModalPDF(false)}>Cancelar</button>
@@ -638,11 +791,12 @@ function Fichajes({ trabajadores, fichajes }) {
   );
 }
 
-// ─── ENCARGOS con Firebase ────────────────────────────────────────────────────
+// ─── ENCARGOS con Firebase (admin) ───────────────────────────────────────────
 function Encargos({ trabajadores }) {
   const [encargos, setEncargos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
+  const [verDetalle, setVerDetalle] = useState(null);
   const [editando, setEditando] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -680,20 +834,34 @@ function Encargos({ trabajadores }) {
           <div style={{display:"grid",gap:12}}>
             {lista.length===0 ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay encargos</div>
               : lista.map(e=>(
-                <div key={e.id} className="card" style={{padding:18,display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}><EstadoBadge estado={e.prioridad}/><EstadoBadge estado={e.estado}/></div>
-                    <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
-                    <div style={{fontSize:12,color:COLORS.muted}}>Cliente: {e.cliente} · Asignado: {e.asignado||"—"} · Fecha: {e.fecha}</div>
-                    {e.notas&&<div style={{fontSize:12,color:COLORS.muted,marginTop:6,fontStyle:"italic"}}>"{e.notas}"</div>}
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-                    <select className="select" style={{fontSize:12,padding:"5px 8px"}} value={e.estado} onChange={ev=>cambiarEstado(e.id,ev.target.value)}>
-                      {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
-                    </select>
-                    <div style={{display:"flex",gap:6}}>
-                      <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(e)}>✏</button>
-                      <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>
+                <div key={e.id} className="card" style={{padding:18}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                        <EstadoBadge estado={e.prioridad}/>
+                        <EstadoBadge estado={e.estado}/>
+                        {e.notasTrabajador && <span className="badge" style={{background:"rgba(255,214,0,.15)",color:COLORS.yellow}}>⚠ Falta material</span>}
+                        {e.fotos && e.fotos.length > 0 && <span className="badge" style={{background:"rgba(0,230,118,.15)",color:COLORS.green}}>📷 {e.fotos.length} foto{e.fotos.length!==1?"s":""}</span>}
+                      </div>
+                      <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
+                      <div style={{fontSize:12,color:COLORS.muted}}>Cliente: {e.cliente} · Asignado: {e.asignado||"—"} · Fecha: {e.fecha}</div>
+                      {e.notasTrabajador && (
+                        <div style={{fontSize:12,color:COLORS.yellow,marginTop:6,background:"rgba(255,214,0,.08)",padding:"6px 10px",borderRadius:6}}>
+                          ⚠ Trabajador informa: {e.notasTrabajador}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+                      <select className="select" style={{fontSize:12,padding:"5px 8px"}} value={e.estado} onChange={ev=>cambiarEstado(e.id,ev.target.value)}>
+                        {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
+                      </select>
+                      <div style={{display:"flex",gap:6}}>
+                        {(e.fotos?.length > 0 || e.notasTrabajador) && (
+                          <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>setVerDetalle(e)}>🔍 Ver</button>
+                        )}
+                        <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(e)}>✏</button>
+                        <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -701,6 +869,38 @@ function Encargos({ trabajadores }) {
           </div>
         </>
       )}
+
+      {/* Modal ver detalle fotos y notas */}
+      {verDetalle && (
+        <Modal title={`Detalle: ${verDetalle.titulo}`} onClose={()=>setVerDetalle(null)} wide>
+          <div style={{display:"grid",gap:16}}>
+            {verDetalle.notasTrabajador && (
+              <div>
+                <label>⚠ Materiales / recambios que faltan</label>
+                <div style={{background:"rgba(255,214,0,.08)",border:`1px solid ${COLORS.yellow}33`,borderRadius:8,padding:12,fontSize:13,color:COLORS.yellow}}>
+                  {verDetalle.notasTrabajador}
+                </div>
+              </div>
+            )}
+            {verDetalle.fotos && verDetalle.fotos.length > 0 && (
+              <div>
+                <label>📷 Fotos del trabajo ({verDetalle.fotos.length})</label>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginTop:8}}>
+                  {verDetalle.fotos.map((url,i)=>(
+                    <a key={i} href={url} target="_blank" rel="noreferrer">
+                      <img src={url} alt={`foto ${i+1}`} style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8,border:`1px solid ${COLORS.border}`,cursor:"pointer"}} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{display:"flex",justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setVerDetalle(null)}>Cerrar</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {modal&&<Modal title={editando?"Editar Encargo":"Nuevo Encargo"} onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
           <div><label>Título *</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
@@ -713,7 +913,7 @@ function Encargos({ trabajadores }) {
             <div><label>Prioridad</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}</select></div>
             <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
-          <div><label>Notas</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
+          <div><label>Notas para el trabajador</label><input className="input" placeholder="Instrucciones, acceso, observaciones..." value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":editando?"Guardar cambios":"Crear encargo"}</button>
@@ -728,8 +928,8 @@ function Encargos({ trabajadores }) {
   );
 }
 
-// ─── ALBARANES con Firebase ───────────────────────────────────────────────────
-function Albaranes({ albaranes, totalAlbaranes }) {
+// ─── ALBARANES ───────────────────────────────────────────────────────────────
+function Albaranes({ albaranes }) {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
@@ -740,19 +940,16 @@ function Albaranes({ albaranes, totalAlbaranes }) {
 
   const abrirNuevo = () => { setEditando(null); setForm(emptyForm); setModal(true); };
   const abrirEditar = (a) => { setEditando(a); setForm({ numero:a.numero, cliente:a.cliente, fecha:a.fecha, importe:String(a.importe), estado:a.estado, descripcion:a.descripcion||"" }); setModal(true); };
-
   const guardar = async () => {
     if (!form.cliente) return; setGuardando(true);
-    const nextNum = `ALB-${new Date().getFullYear()}-${String(totalAlbaranes+1).padStart(3,"0")}`;
+    const nextNum = `ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`;
     const datos = { ...form, importe: Number(form.importe), numero: form.numero || nextNum };
     if (editando) await updateDoc(doc(db,"albaranes",editando.id), datos);
     else await addDoc(collection(db,"albaranes"), datos);
     setGuardando(false); setModal(false);
   };
-
   const eliminar = async (id) => { await deleteDoc(doc(db,"albaranes",id)); setConfirmarEliminar(null); };
   const cambiarEstado = async (id, estado) => { await updateDoc(doc(db,"albaranes",id), { estado }); };
-
   const lista = filtro==="Todos" ? albaranes : albaranes.filter(a=>a.estado===filtro);
   const total = lista.reduce((s,a)=>s+a.importe, 0);
 
@@ -774,23 +971,13 @@ function Albaranes({ albaranes, totalAlbaranes }) {
                 <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted,maxWidth:200}}>{a.descripcion}</td>
                 <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{a.fecha}</td>
                 <td style={{padding:"12px 16px",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>{a.importe.toLocaleString()}€</td>
-                <td style={{padding:"12px 16px"}}>
-                  <select className="select" style={{fontSize:12,padding:"4px 8px"}} value={a.estado} onChange={ev=>cambiarEstado(a.id,ev.target.value)}>
-                    {ESTADOS_ALBARAN.map(s=><option key={s}>{s}</option>)}
-                  </select>
-                </td>
-                <td style={{padding:"12px 16px"}}>
-                  <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(a)}>✏</button>
-                    <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(a)}>🗑</button>
-                  </div>
-                </td>
+                <td style={{padding:"12px 16px"}}><select className="select" style={{fontSize:12,padding:"4px 8px"}} value={a.estado} onChange={ev=>cambiarEstado(a.id,ev.target.value)}>{ESTADOS_ALBARAN.map(s=><option key={s}>{s}</option>)}</select></td>
+                <td style={{padding:"12px 16px"}}><div style={{display:"flex",gap:6}}><button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(a)}>✏</button><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(a)}>🗑</button></div></td>
               </tr>
             ))}</tbody>
           </table>
         )}
       </div>
-
       {modal&&<Modal title={editando?"Editar Albarán":"Nuevo Albarán"} onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -809,7 +996,6 @@ function Albaranes({ albaranes, totalAlbaranes }) {
           </div>
         </div>
       </Modal>}
-
       {confirmarEliminar&&<Modal title="¿Eliminar albarán?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.numero} — {confirmarEliminar.cliente}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
@@ -918,14 +1104,16 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
   const encargosActivos=encargos.filter(e=>e.estado==="En curso"||e.estado==="Pendiente").length;
+  const materialFaltante=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado").length;
   const totalFacturado=albaranes.filter(a=>a.estado==="Cobrado").reduce((s,a)=>s+a.importe,0);
   const stats=[
     {label:"Trabajadores activos",value:trabajadores.filter(t=>t.estado!=="Inactivo").length,color:COLORS.accent,icon:"👷"},
-    {label:"Trabajadores fichados hoy",value:fichajesHoy,color:COLORS.green,icon:"⏱"},
+    {label:"Fichados hoy",value:fichajesHoy,color:COLORS.green,icon:"⏱"},
     {label:"Encargos activos",value:encargosActivos,color:COLORS.warm,icon:"🔧"},
-    {label:"Facturado (cobrado)",value:`${totalFacturado.toLocaleString()}€`,color:COLORS.yellow,icon:"💶"},
+    {label:"⚠ Falta material",value:materialFaltante,color:COLORS.yellow,icon:"📦"},
   ];
   const urgentes=encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado");
+  const conMaterial=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado");
   const fichajesHoyList=fichajes.filter(f=>f.fecha===hoy).slice(0,6);
 
   return (
@@ -938,7 +1126,7 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
           <div style={{fontSize:12,color:COLORS.muted,marginTop:4}}>{s.label}</div>
         </div>)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
         <div className="card" style={{padding:20}}>
           <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.accent}}>⏱ Fichajes de hoy</div>
           {fichajesHoyList.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sin fichajes hoy</div>:fichajesHoyList.map(f=>(
@@ -961,6 +1149,17 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
           ))}
         </div>
       </div>
+      {conMaterial.length > 0 && (
+        <div className="card" style={{padding:20,borderLeft:`3px solid ${COLORS.yellow}`}}>
+          <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.yellow}}>📦 Material pendiente de gestionar</div>
+          {conMaterial.map(e=>(
+            <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
+              <div style={{fontSize:13,fontWeight:500}}>{e.titulo} <span style={{fontSize:12,color:COLORS.muted}}>— {e.asignado}</span></div>
+              <div style={{fontSize:12,color:COLORS.yellow,marginTop:3}}>⚠ {e.notasTrabajador}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1055,7 +1254,7 @@ export default function App() {
           {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT}/>}
           {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
           {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
-          {section==="albaranes"&&<Albaranes albaranes={albaranes} totalAlbaranes={albaranes.length}/>}
+          {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
           {section==="manuales"&&<Manuales onManualesChange={setManuales}/>}
         </div>
       </div>
