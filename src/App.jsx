@@ -46,16 +46,10 @@ const STYLE = `
 const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
 const ESTADOS_ENCARGO = ["Pendiente", "En curso", "Completado", "Cancelado"];
 
-const initialData = {
-  albaranes: [
-    { id: 1, numero: "ALB-2026-001", cliente: "Hotel Sol & Mar", fecha: "2026-04-05", importe: 1840, estado: "Cobrado", descripcion: "Mantenimiento anual 4 unidades" },
-    { id: 2, numero: "ALB-2026-002", cliente: "Oficinas Central SA", fecha: "2026-04-07", importe: 3200, estado: "Enviado", descripcion: "Instalación sistema VRV" },
-  ],
-  encargos: [
-    { id: 1, titulo: "Instalación split 3x1 - Clínica Salud", cliente: "Clínica Salud", asignado: "", prioridad: "Alta", estado: "En curso", fecha: "2026-04-10", notas: "Acceso por planta 2" },
-    { id: 2, titulo: "Revisión anual - Hotel Mar Azul", cliente: "Hotel Mar Azul", asignado: "", prioridad: "Media", estado: "Pendiente", fecha: "2026-04-15", notas: "" },
-  ],
-};
+const initialAlbaranes = [
+  { id: 1, numero: "ALB-2026-001", cliente: "Hotel Sol & Mar", fecha: "2026-04-05", importe: 1840, estado: "Cobrado", descripcion: "Mantenimiento anual 4 unidades" },
+  { id: 2, numero: "ALB-2026-002", cliente: "Oficinas Central SA", fecha: "2026-04-07", importe: 3200, estado: "Enviado", descripcion: "Instalación sistema VRV" },
+];
 
 function calcHoras(entrada, salida) {
   if (!entrada || !salida) return "-";
@@ -79,7 +73,6 @@ function horaActual() {
   return `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
 }
 
-// ─── GPS ──────────────────────────────────────────────────────────────────────
 function obtenerUbicacion() {
   return new Promise((resolve) => {
     if (!navigator.geolocation) { resolve(null); return; }
@@ -113,8 +106,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   const porDia = {};
   registros.forEach(f => { if (!porDia[f.fecha]) porDia[f.fecha] = []; porDia[f.fecha].push(f); });
 
-  pdf.setFillColor(15, 17, 23);
-  pdf.rect(0, 0, 210, 40, "F");
+  pdf.setFillColor(15, 17, 23); pdf.rect(0, 0, 210, 40, "F");
   pdf.setTextColor(0, 196, 255); pdf.setFontSize(20); pdf.setFont("helvetica", "bold");
   pdf.text("REGISTRO DE JORNADA LABORAL", 105, 15, { align: "center" });
   pdf.setTextColor(200, 200, 200); pdf.setFontSize(11);
@@ -132,8 +124,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   pdf.text(`Total horas: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 120, 60);
   pdf.text(`Generado: ${ahora.toLocaleDateString("es-ES")} ${ahora.toLocaleTimeString("es-ES")}`, 120, 67);
   pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 30, 30);
-  pdf.text("REGISTROS DE JORNADA", 14, 85);
-  pdf.line(14, 87, 196, 87);
+  pdf.text("REGISTROS DE JORNADA", 14, 85); pdf.line(14, 87, 196, 87);
 
   if (registros.length === 0) {
     pdf.setFont("helvetica", "italic"); pdf.setFontSize(10); pdf.setTextColor(150, 150, 150);
@@ -146,14 +137,10 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
       const dia = fechaObj.toLocaleDateString("es-ES", { weekday: "short" });
       tramos.forEach((f, i) => {
         const ubEntrada = f.ubicacionEntrada ? `${f.ubicacionEntrada.lat.toFixed(4)},${f.ubicacionEntrada.lng.toFixed(4)}` : "—";
-        const ubSalida = f.ubicacionSalida ? `${f.ubicacionSalida.lat.toFixed(4)},${f.ubicacionSalida.lng.toFixed(4)}` : "—";
         rows.push([
-          i === 0 ? fecha : "",
-          i === 0 ? dia.charAt(0).toUpperCase() + dia.slice(1) : "",
-          `T${i+1}`, f.entrada||"—", f.salida||"—",
-          calcHoras(f.entrada, f.salida),
-          i === tramos.length-1 ? `${Math.floor(totalDia/60)}h ${totalDia%60}m` : "",
-          ubEntrada
+          i === 0 ? fecha : "", i === 0 ? dia.charAt(0).toUpperCase() + dia.slice(1) : "",
+          `T${i+1}`, f.entrada||"—", f.salida||"—", calcHoras(f.entrada, f.salida),
+          i === tramos.length-1 ? `${Math.floor(totalDia/60)}h ${totalDia%60}m` : "", ubEntrada
         ]);
       });
     });
@@ -233,22 +220,13 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const totalHoyMins = misFichajesHoy.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
 
   const ficharEntrada = async () => {
-    setFichando(true);
-    setMensajeGPS("Obteniendo ubicación...");
+    setFichando(true); setMensajeGPS("Obteniendo ubicación...");
     const ubicacion = await obtenerUbicacion();
-    if (ubicacion) {
-      setMensajeGPS("📍 Ubicación registrada");
-    } else {
-      setMensajeGPS("⚠ No se pudo obtener ubicación");
-    }
+    setMensajeGPS(ubicacion ? "📍 Ubicación registrada" : "⚠ No se pudo obtener ubicación");
     await addDoc(collection(db, "fichajes"), {
-      trabajador: usuarioInfo.nombre,
-      fecha: hoy,
-      entrada: horaActual(),
-      salida: "",
-      notas: "",
-      tramo: misFichajesHoy.length + 1,
-      ubicacionEntrada: ubicacion,
+      trabajador: usuarioInfo.nombre, fecha: hoy,
+      entrada: horaActual(), salida: "", notas: "",
+      tramo: misFichajesHoy.length + 1, ubicacionEntrada: ubicacion,
     });
     setFichando(false);
     setTimeout(() => setMensajeGPS(""), 3000);
@@ -256,18 +234,10 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
 
   const ficharSalida = async () => {
     if (!ultimoTramo) return;
-    setFichando(true);
-    setMensajeGPS("Obteniendo ubicación...");
+    setFichando(true); setMensajeGPS("Obteniendo ubicación...");
     const ubicacion = await obtenerUbicacion();
-    if (ubicacion) {
-      setMensajeGPS("📍 Ubicación registrada");
-    } else {
-      setMensajeGPS("⚠ No se pudo obtener ubicación");
-    }
-    await updateDoc(doc(db, "fichajes", ultimoTramo.id), {
-      salida: horaActual(),
-      ubicacionSalida: ubicacion,
-    });
+    setMensajeGPS(ubicacion ? "📍 Ubicación registrada" : "⚠ No se pudo obtener ubicación");
+    await updateDoc(doc(db, "fichajes", ultimoTramo.id), { salida: horaActual(), ubicacionSalida: ubicacion });
     setFichando(false);
     setTimeout(() => setMensajeGPS(""), 3000);
   };
@@ -284,20 +254,14 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => signOut(auth)}>Salir</button>
         </div>
       </div>
-
       <div style={{ padding:24, maxWidth:800, margin:"0 auto" }}>
         <div className="card" style={{ padding:28, marginBottom:24, borderTop:`3px solid ${COLORS.accent}` }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
             <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700 }}>
               {new Date().toLocaleDateString("es-ES", { weekday:"long", day:"numeric", month:"long" })}
             </div>
-            {totalHoyMins > 0 && (
-              <div style={{ fontSize:13, color:COLORS.accent, marginTop:4 }}>
-                ⏱ Total hoy: {Math.floor(totalHoyMins/60)}h {totalHoyMins%60}m
-              </div>
-            )}
+            {totalHoyMins > 0 && <div style={{ fontSize:13, color:COLORS.accent, marginTop:4 }}>⏱ Total hoy: {Math.floor(totalHoyMins/60)}h {totalHoyMins%60}m</div>}
           </div>
-
           {misFichajesHoy.length > 0 && (
             <div style={{ marginBottom:20 }}>
               {misFichajesHoy.map((f, i) => (
@@ -305,19 +269,14 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                   <span style={{ fontSize:12, color:COLORS.muted, minWidth:60 }}>Tramo {i+1}</span>
                   <span style={{ fontSize:13, color:COLORS.green }}>{f.entrada}</span>
                   <span style={{ color:COLORS.muted }}>→</span>
-                  <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>
-                    {f.salida || "en curso..."}
-                  </span>
-                  {f.salida && <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>}
-                  {!f.salida && <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>}
-                  {f.ubicacionEntrada && (
-                    <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />
-                  )}
+                  <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>{f.salida || "en curso..."}</span>
+                  {f.salida ? <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>
+                    : <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>}
+                  {f.ubicacionEntrada && <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />}
                 </div>
               ))}
             </div>
           )}
-
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
             {!hayTramoAbierto && (
               <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
@@ -329,36 +288,25 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                 {fichando ? "Registrando..." : "🔴 Salida"}
               </button>
             )}
-            {mensajeGPS && (
-              <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{mensajeGPS}</div>
-            )}
-            {misFichajesHoy.length === 0 && !fichando && (
-              <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>
-                📍 Se registrará tu ubicación al fichar
-              </div>
-            )}
+            {mensajeGPS && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{mensajeGPS}</div>}
+            {misFichajesHoy.length === 0 && !fichando && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>📍 Se registrará tu ubicación al fichar</div>}
           </div>
         </div>
-
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
           <div className="card" style={{ padding:20 }}>
             <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
-            {misEncargos.length === 0
-              ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos asignados</div>
+            {misEncargos.length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos asignados</div>
               : misEncargos.map(e => (
                 <div key={e.id} style={{ padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
                   <div style={{ fontSize:13, fontWeight:600 }}>{e.titulo}</div>
                   <div style={{ fontSize:12, color:COLORS.muted, marginTop:3 }}>{e.cliente} · {e.fecha}</div>
                   <div style={{ marginTop:4 }}><span className="badge" style={{ background:"rgba(255,107,53,.2)", color:COLORS.warm }}>{e.prioridad}</span></div>
                 </div>
-              ))
-            }
+              ))}
           </div>
-
           <div className="card" style={{ padding:20 }}>
             <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
-            {Object.keys(porFecha).length === 0
-              ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
+            {Object.keys(porFecha).length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
               : Object.entries(porFecha).slice(0, 5).map(([fecha, tramos]) => {
                 const totalDia = tramos.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
                 return (
@@ -374,8 +322,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                     ))}
                   </div>
                 );
-              })
-            }
+              })}
           </div>
         </div>
       </div>
@@ -429,9 +376,7 @@ function GestionUsuarios({ trabajadores }) {
   const [error, setError] = useState("");
   const [usuarios, setUsuarios] = useState([]);
 
-  useEffect(() => {
-    return onSnapshot(collection(db,"usuarios"), snap => setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()}))));
-  }, []);
+  useEffect(() => { return onSnapshot(collection(db,"usuarios"), snap => setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()})))); }, []);
 
   const crearUsuario = async () => {
     if (!form.email||!form.password||!form.nombre) return;
@@ -439,11 +384,8 @@ function GestionUsuarios({ trabajadores }) {
     try {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
       await setDoc(doc(db,"usuarios",cred.user.uid), { email:form.email, nombre:form.nombre, rol:form.rol });
-      setModal(false);
-      setForm({ email:"", password:"", nombre:"", rol:"trabajador" });
-    } catch(e) {
-      setError(e.code==="auth/email-already-in-use"?"Este email ya está en uso":"Error al crear el usuario");
-    }
+      setModal(false); setForm({ email:"", password:"", nombre:"", rol:"trabajador" });
+    } catch(e) { setError(e.code==="auth/email-already-in-use"?"Este email ya está en uso":"Error al crear el usuario"); }
     setGuardando(false);
   };
 
@@ -461,29 +403,25 @@ function GestionUsuarios({ trabajadores }) {
             </div>
             <div style={{ fontWeight:700, fontSize:15 }}>{u.nombre}</div>
             <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{u.email}</div>
-            <div style={{ marginTop:12 }}>
-              <button className="btn btn-danger" onClick={() => deleteDoc(doc(db,"usuarios",u.id))}>🗑 Eliminar acceso</button>
-            </div>
+            <div style={{ marginTop:12 }}><button className="btn btn-danger" onClick={() => deleteDoc(doc(db,"usuarios",u.id))}>🗑 Eliminar acceso</button></div>
           </div>
         ))}
       </div>
       {modal && <Modal title="Crear usuario" onClose={() => setModal(false)}>
         <div style={{ display:"grid", gap:14 }}>
-          <div style={{ background:"rgba(0,196,255,0.08)", border:`1px solid ${COLORS.accent}33`, borderRadius:10, padding:12, fontSize:12, color:COLORS.muted }}>
-            El usuario accederá con el email y contraseña que definas aquí.
-          </div>
+          <div style={{ background:"rgba(0,196,255,0.08)", border:`1px solid ${COLORS.accent}33`, borderRadius:10, padding:12, fontSize:12, color:COLORS.muted }}>El usuario accederá con el email y contraseña que definas aquí.</div>
           <div><label>Trabajador</label>
             <select className="select" style={{ width:"100%" }} value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})}>
               <option value="">Selecciona trabajador</option>
               {trabajadores.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}
             </select>
           </div>
-          <div><label>Email</label><input className="input" type="email" placeholder="trabajador@empresa.com" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+          <div><label>Email</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
           <div><label>Contraseña</label><input className="input" type="password" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} /></div>
           <div><label>Rol</label>
             <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e=>setForm({...form,rol:e.target.value})}>
-              <option value="trabajador">Trabajador (fichar + ver encargos)</option>
-              <option value="admin">Administrador (acceso total)</option>
+              <option value="trabajador">Trabajador</option>
+              <option value="admin">Administrador</option>
             </select>
           </div>
           {error && <div style={{ fontSize:13, color:COLORS.danger }}>{error}</div>}
@@ -508,8 +446,7 @@ function Trabajadores({ trabajadores, cargandoT }) {
   const abrirNuevo = () => { setEditando(null); setForm({ nombre:"", telefono:"", email:"", cargo:"Técnico", estado:"Activo", notas:"" }); setModal(true); };
   const abrirEditar = (t) => { setEditando(t); setForm({ nombre:t.nombre, telefono:t.telefono||"", email:t.email||"", cargo:t.cargo||"Técnico", estado:t.estado||"Activo", notas:t.notas||"" }); setModal(true); };
   const guardar = async () => {
-    if (!form.nombre) return;
-    setGuardando(true);
+    if (!form.nombre) return; setGuardando(true);
     if (editando) await updateDoc(doc(db,"trabajadores",editando.id), form);
     else await addDoc(collection(db,"trabajadores"), form);
     setGuardando(false); setModal(false);
@@ -574,15 +511,15 @@ function Trabajadores({ trabajadores, cargandoT }) {
         </div>
       </Modal>}
       {confirmarEliminar&&<Modal title="¿Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
-        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.nombre}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>Esta acción no se puede deshacer.</div></div>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.nombre}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
 }
 
-// ─── FICHAJES (admin) ─────────────────────────────────────────────────────────
-function Fichajes({ trabajadores, fichajes, cargando }) {
+// ─── FICHAJES ────────────────────────────────────────────────────────────────
+function Fichajes({ trabajadores, fichajes }) {
   const [modal, setModal] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
@@ -599,26 +536,18 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
 
   const guardar = async () => {
     if (!form.trabajador||!form.fecha||!form.entrada) return;
-    setGuardando(true);
-    await addDoc(collection(db,"fichajes"), form);
-    setGuardando(false); setModal(false);
+    setGuardando(true); await addDoc(collection(db,"fichajes"), form); setGuardando(false); setModal(false);
   };
-
   const eliminar = async (id) => { await deleteDoc(doc(db,"fichajes",id)); setConfirmarEliminar(null); };
   const registrarSalida = async (f) => { await updateDoc(doc(db,"fichajes",f.id), { salida: horaActual() }); };
 
-  const lista = fichajes
-    .filter(f=>filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador)
-    .filter(f=>!filtroFecha||f.fecha===filtroFecha);
-
+  const lista = fichajes.filter(f=>filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador).filter(f=>!filtroFecha||f.fecha===filtroFecha);
   const horasTotal = lista.reduce((s,f)=>s+calcMinutos(f.entrada,f.salida),0);
-
   const grupos = {};
   lista.forEach(f => {
     const clave = `${f.trabajador}__${f.fecha}`;
     if (!grupos[clave]) grupos[clave] = { trabajador:f.trabajador, fecha:f.fecha, tramos:[], totalMins:0 };
-    grupos[clave].tramos.push(f);
-    grupos[clave].totalMins += calcMinutos(f.entrada, f.salida);
+    grupos[clave].tramos.push(f); grupos[clave].totalMins += calcMinutos(f.entrada, f.salida);
   });
   const listaAgrupada = Object.values(grupos).sort((a,b)=>b.fecha.localeCompare(a.fecha)||a.trabajador.localeCompare(b.trabajador));
 
@@ -627,14 +556,11 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
         <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Control Horario ☁</h2>
         <div style={{display:"flex",gap:8}}>
-          <button className="btn btn-ghost" onClick={()=>setVistaAgrupada(!vistaAgrupada)} style={{fontSize:12}}>
-            {vistaAgrupada?"Vista detallada":"Vista agrupada"}
-          </button>
+          <button className="btn btn-ghost" onClick={()=>setVistaAgrupada(!vistaAgrupada)} style={{fontSize:12}}>{vistaAgrupada?"Vista detallada":"Vista agrupada"}</button>
           <button className="btn btn-ghost" onClick={()=>{setTrabajadorPDF(todosNombres[0]||"");setModalPDF(true);}}>📄 PDF 4 años</button>
           <button className="btn btn-primary" onClick={()=>setModal(true)}>+ Registrar fichaje</button>
         </div>
       </div>
-
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
         <select className="select" value={filtroTrabajador} onChange={e=>setFiltroTrabajador(e.target.value)}>
           <option value="Todos">Todos los trabajadores</option>
@@ -642,25 +568,16 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
         </select>
         <input className="input" type="date" style={{width:"auto"}} value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} />
         {filtroFecha&&<button className="btn btn-ghost" style={{fontSize:12}} onClick={()=>setFiltroFecha("")}>✕ Limpiar</button>}
-        <span style={{marginLeft:"auto",fontFamily:"Rajdhani",fontSize:14,fontWeight:700,color:COLORS.accent}}>
-          Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m
-        </span>
+        <span style={{marginLeft:"auto",fontFamily:"Rajdhani",fontSize:14,fontWeight:700,color:COLORS.accent}}>Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m</span>
       </div>
-
       {vistaAgrupada ? (
         <div style={{display:"grid",gap:12}}>
-          {listaAgrupada.length===0
-            ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>
+          {listaAgrupada.length===0 ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>
             : listaAgrupada.map(g => (
               <div key={`${g.trabajador}__${g.fecha}`} className="card" style={{padding:16}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                  <div>
-                    <span style={{fontWeight:600,fontSize:14}}>{g.trabajador}</span>
-                    <span style={{fontSize:13,color:COLORS.muted,marginLeft:12}}>{g.fecha}</span>
-                  </div>
-                  <span style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,color:COLORS.accent}}>
-                    {Math.floor(g.totalMins/60)}h {g.totalMins%60}m total
-                  </span>
+                  <div><span style={{fontWeight:600,fontSize:14}}>{g.trabajador}</span><span style={{fontSize:13,color:COLORS.muted,marginLeft:12}}>{g.fecha}</span></div>
+                  <span style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,color:COLORS.accent}}>{Math.floor(g.totalMins/60)}h {g.totalMins%60}m total</span>
                 </div>
                 <div style={{display:"grid",gap:6}}>
                   {g.tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f,i)=>(
@@ -668,71 +585,49 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
                       <span style={{fontSize:12,color:COLORS.muted,minWidth:55}}>Tramo {i+1}</span>
                       <span style={{fontSize:13,color:COLORS.green}}>{f.entrada}</span>
                       <span style={{color:COLORS.muted}}>→</span>
-                      <span style={{fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>
-                        {f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"2px 8px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}
-                      </span>
+                      <span style={{fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"2px 8px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}</span>
                       {f.salida&&<span style={{fontSize:12,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span>}
-                      {f.ubicacionEntrada && (
-                        <span style={{marginLeft:4}}>
-                          <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />
-                        </span>
-                      )}
-                      {f.ubicacionSalida && (
-                        <span style={{marginLeft:4,fontSize:11,color:COLORS.muted}}>
-                          salida: <a href={`https://www.google.com/maps?q=${f.ubicacionSalida.lat},${f.ubicacionSalida.lng}`} target="_blank" rel="noreferrer" style={{color:COLORS.warm,textDecoration:"none"}}>📍 ver</a>
-                        </span>
-                      )}
-                      {f.notas&&<span style={{fontSize:11,color:COLORS.muted,fontStyle:"italic",flex:1}}>"{f.notas}"</span>}
+                      {f.ubicacionEntrada&&<LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />}
+                      {f.ubicacionSalida&&<a href={`https://www.google.com/maps?q=${f.ubicacionSalida.lat},${f.ubicacionSalida.lng}`} target="_blank" rel="noreferrer" style={{fontSize:11,color:COLORS.warm,textDecoration:"none"}}>📍 salida</a>}
                       <button className="btn btn-danger" style={{marginLeft:"auto"}} onClick={()=>setConfirmarEliminar(f)}>🗑</button>
                     </div>
                   ))}
                 </div>
               </div>
-            ))
-          }
+            ))}
         </div>
       ) : (
         <div className="card" style={{overflow:"hidden"}}>
-          {cargando?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>Cargando...</div>:lista.length===0?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>:(
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Trabajador","Fecha","Entrada","GPS","Salida","Horas",""].map((h,i)=><th key={i} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
-              <tbody>{lista.map(f=>(
-                <tr key={f.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
-                  <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{f.trabajador}</td>
-                  <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{f.fecha}</td>
-                  <td style={{padding:"12px 16px",fontSize:13,color:COLORS.green}}>{f.entrada}</td>
-                  <td style={{padding:"12px 16px"}}>
-                    {f.ubicacionEntrada
-                      ? <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />
-                      : <span style={{fontSize:11,color:COLORS.muted}}>—</span>
-                    }
-                  </td>
-                  <td style={{padding:"12px 16px",fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}</td>
-                  <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
-                  <td style={{padding:"12px 16px"}}><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(f)}>🗑</button></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          )}
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Trabajador","Fecha","Entrada","GPS","Salida","Horas",""].map((h,i)=><th key={i} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+            <tbody>{lista.map(f=>(
+              <tr key={f.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
+                <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{f.trabajador}</td>
+                <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{f.fecha}</td>
+                <td style={{padding:"12px 16px",fontSize:13,color:COLORS.green}}>{f.entrada}</td>
+                <td style={{padding:"12px 16px"}}>{f.ubicacionEntrada?<LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />:<span style={{fontSize:11,color:COLORS.muted}}>—</span>}</td>
+                <td style={{padding:"12px 16px",fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}</td>
+                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
+                <td style={{padding:"12px 16px"}}><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(f)}>🗑</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
       )}
-
-      {modalPDF&&<Modal title="📄 Informe PDF — Últimos 4 años" onClose={()=>setModalPDF(false)}>
+      {modalPDF&&<Modal title="📄 PDF — Últimos 4 años" onClose={()=>setModalPDF(false)}>
         <div style={{display:"grid",gap:16}}>
-          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>. Incluye coordenadas GPS de cada fichaje.</div>
+          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>PDF con GPS cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>.</div>
           <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={trabajadorPDF} onChange={e=>setTrabajadorPDF(e.target.value)}>{todosNombres.map(t=><option key={t}>{t}</option>)}</select></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModalPDF(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={()=>{generarPDFHorario(trabajadorPDF,fichajes);setModalPDF(false);}}>📥 Descargar PDF</button>
+            <button className="btn btn-primary" onClick={()=>{generarPDFHorario(trabajadorPDF,fichajes);setModalPDF(false);}}>📥 Descargar</button>
           </div>
         </div>
       </Modal>}
-
       {confirmarEliminar&&<Modal title="¿Eliminar tramo?" onClose={()=>setConfirmarEliminar(null)}>
-        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha} {confirmarEliminar.entrada}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>Esta acción no se puede deshacer.</div></div>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
-
       {modal&&<Modal title="Registrar Fichaje" onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:16}}>
           <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={form.trabajador} onChange={e=>setForm({...form,trabajador:e.target.value})}>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
@@ -741,7 +636,7 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
             <div><label>Entrada</label><input className="input" type="time" value={form.entrada} onChange={e=>setForm({...form,entrada:e.target.value})} /></div>
           </div>
           <div><label>Salida (opcional)</label><input className="input" type="time" value={form.salida} onChange={e=>setForm({...form,salida:e.target.value})} /></div>
-          <div><label>Notas</label><input className="input" placeholder="Trabajo realizado..." value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
+          <div><label>Notas</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":"Guardar ☁"}</button>
@@ -752,52 +647,111 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
   );
 }
 
-// ─── ENCARGOS ────────────────────────────────────────────────────────────────
-function Encargos({ encargos, setEncargos, trabajadores }) {
+// ─── ENCARGOS con Firebase ────────────────────────────────────────────────────
+function Encargos({ trabajadores }) {
+  const [encargos, setEncargos] = useState([]);
+  const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
+  const [guardando, setGuardando] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
   const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
-  const [form, setForm] = useState({ titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" });
+  const emptyForm = { titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" };
+  const [form, setForm] = useState(emptyForm);
 
-  const guardar = () => { setEncargos(prev=>[...prev,{...form,id:Date.now()}]); setModal(false); setForm({titulo:"",cliente:"",asignado:"",prioridad:"Media",estado:"Pendiente",fecha:"",notas:""}); };
-  const lista = filtro==="Todos"?encargos:encargos.filter(e=>e.estado===filtro);
+  useEffect(() => {
+    const q = query(collection(db,"encargos"), orderBy("fecha","desc"));
+    return onSnapshot(q, snap => { setEncargos(snap.docs.map(d=>({id:d.id,...d.data()}))); setCargando(false); });
+  }, []);
+
+  const abrirNuevo = () => { setEditando(null); setForm(emptyForm); setModal(true); };
+  const abrirEditar = (e) => { setEditando(e); setForm({ titulo:e.titulo, cliente:e.cliente, asignado:e.asignado||"", prioridad:e.prioridad, estado:e.estado, fecha:e.fecha, notas:e.notas||"" }); setModal(true); };
+
+  const guardar = async () => {
+    if (!form.titulo) return;
+    setGuardando(true);
+    if (editando) await updateDoc(doc(db,"encargos",editando.id), form);
+    else await addDoc(collection(db,"encargos"), form);
+    setGuardando(false); setModal(false);
+  };
+
+  const eliminar = async (id) => { await deleteDoc(doc(db,"encargos",id)); setConfirmarEliminar(null); };
+
+  const cambiarEstado = async (id, estado) => { await updateDoc(doc(db,"encargos",id), { estado }); };
+
+  const lista = filtro==="Todos" ? encargos : encargos.filter(e=>e.estado===filtro);
 
   return (
     <div>
-      <Header title="Encargos" onAdd={()=>setModal(true)} addLabel="+ Nuevo encargo" />
-      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
-        {["Todos",...ESTADOS_ENCARGO].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
-      </div>
-      <div style={{display:"grid",gap:12}}>
-        {lista.map(e=>(
-          <div key={e.id} className="card" style={{padding:18,display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
-            <div>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}><EstadoBadge estado={e.prioridad}/><EstadoBadge estado={e.estado}/></div>
-              <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
-              <div style={{fontSize:12,color:COLORS.muted}}>Cliente: {e.cliente} · Asignado: {e.asignado||"—"} · Fecha: {e.fecha}</div>
-              {e.notas&&<div style={{fontSize:12,color:COLORS.muted,marginTop:6,fontStyle:"italic"}}>"{e.notas}"</div>}
-            </div>
-            <select className="select" style={{fontSize:12,padding:"5px 8px"}} value={e.estado} onChange={ev=>setEncargos(prev=>prev.map(x=>x.id===e.id?{...x,estado:ev.target.value}:x))}>
-              {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
-            </select>
+      <Header title="Encargos ☁" onAdd={abrirNuevo} addLabel="+ Nuevo encargo" />
+      {cargando ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div> : (
+        <>
+          <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+            {["Todos",...ESTADOS_ENCARGO].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
+            <span style={{marginLeft:"auto",alignSelf:"center",fontSize:12,color:COLORS.muted}}>{lista.length} encargo{lista.length!==1?"s":""}</span>
           </div>
-        ))}
-      </div>
-      {modal&&<Modal title="Nuevo Encargo" onClose={()=>setModal(false)}>
+          <div style={{display:"grid",gap:12}}>
+            {lista.length===0 ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay encargos</div>
+              : lista.map(e=>(
+                <div key={e.id} className="card" style={{padding:18,display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}><EstadoBadge estado={e.prioridad}/><EstadoBadge estado={e.estado}/></div>
+                    <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
+                    <div style={{fontSize:12,color:COLORS.muted}}>Cliente: {e.cliente} · Asignado: {e.asignado||"—"} · Fecha: {e.fecha}</div>
+                    {e.notas&&<div style={{fontSize:12,color:COLORS.muted,marginTop:6,fontStyle:"italic"}}>"{e.notas}"</div>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+                    <select className="select" style={{fontSize:12,padding:"5px 8px"}} value={e.estado} onChange={ev=>cambiarEstado(e.id,ev.target.value)}>
+                      {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
+                    </select>
+                    <div style={{display:"flex",gap:6}}>
+                      <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(e)}>✏</button>
+                      <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </>
+      )}
+
+      {modal&&<Modal title={editando?"Editar Encargo":"Nuevo Encargo"} onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:14}}>
-          <div><label>Título</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
+          <div><label>Título *</label><input className="input" placeholder="Ej: Instalación split - Cliente X" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Cliente</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
-            <div><label>Fecha</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
+            <div><label>Fecha prevista</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-            <div><label>Asignado</label><select className="select" style={{width:"100%"}} value={form.asignado} onChange={e=>setForm({...form,asignado:e.target.value})}><option value="">Sin asignar</option>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
-            <div><label>Prioridad</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}</select></div>
-            <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
+            <div><label>Asignado</label>
+              <select className="select" style={{width:"100%"}} value={form.asignado} onChange={e=>setForm({...form,asignado:e.target.value})}>
+                <option value="">Sin asignar</option>
+                {nombresActivos.map(t=><option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div><label>Prioridad</label>
+              <select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>
+                {["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div><label>Estado</label>
+              <select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
+                {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
           </div>
-          <div><label>Notas</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
-          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Crear encargo</button></div>
+          <div><label>Notas</label><input className="input" placeholder="Observaciones, acceso, materiales..." value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":editando?"Guardar cambios":"Crear encargo"}</button>
+          </div>
         </div>
+      </Modal>}
+
+      {confirmarEliminar&&<Modal title="¿Eliminar encargo?" onClose={()=>setConfirmarEliminar(null)}>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
@@ -954,18 +908,18 @@ function Manuales({ onManualesChange }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-function Dashboard({ data, manuales, fichajes, trabajadores }) {
+function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
-  const encargosActivos=data.encargos.filter(e=>e.estado==="En curso"||e.estado==="Pendiente").length;
-  const totalFacturado=data.albaranes.filter(a=>a.estado==="Cobrado").reduce((s,a)=>s+a.importe,0);
+  const encargosActivos=encargos.filter(e=>e.estado==="En curso"||e.estado==="Pendiente").length;
+  const totalFacturado=albaranes.filter(a=>a.estado==="Cobrado").reduce((s,a)=>s+a.importe,0);
   const stats=[
     {label:"Trabajadores activos",value:trabajadores.filter(t=>t.estado!=="Inactivo").length,color:COLORS.accent,icon:"👷"},
     {label:"Trabajadores fichados hoy",value:fichajesHoy,color:COLORS.green,icon:"⏱"},
     {label:"Encargos activos",value:encargosActivos,color:COLORS.warm,icon:"🔧"},
     {label:"Facturado (cobrado)",value:`${totalFacturado.toLocaleString()}€`,color:COLORS.yellow,icon:"💶"},
   ];
-  const urgentes=data.encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado");
+  const urgentes=encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado");
   const fichajesHoyList=fichajes.filter(f=>f.fecha===hoy).slice(0,6);
 
   return (
@@ -986,7 +940,7 @@ function Dashboard({ data, manuales, fichajes, trabajadores }) {
               <span style={{fontSize:13,fontWeight:500}}>{f.trabajador}</span>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."}</span>
-                {f.ubicacionEntrada && <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} />}
+                {f.ubicacionEntrada&&<LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} />}
               </div>
             </div>
           ))}
@@ -1021,14 +975,12 @@ export default function App() {
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [cargandoAuth, setCargandoAuth] = useState(true);
   const [section, setSection] = useState("dashboard");
-  const [data, setData] = useState(initialData);
+  const [albaranes, setAlbaranes] = useState(initialAlbaranes);
   const [manuales, setManuales] = useState([]);
   const [fichajes, setFichajes] = useState([]);
+  const [encargos, setEncargos] = useState([]);
   const [trabajadores, setTrabajadores] = useState([]);
   const [cargandoT, setCargandoT] = useState(true);
-
-  const setAlbaranes = fn => setData(d=>({...d,albaranes:fn(d.albaranes)}));
-  const setEncargos = fn => setData(d=>({...d,encargos:fn(d.encargos)}));
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
@@ -1051,9 +1003,14 @@ export default function App() {
     return onSnapshot(q,snap=>{setTrabajadores(snap.docs.map(d=>({id:d.id,...d.data()})));setCargandoT(false);});
   }, []);
 
+  useEffect(() => {
+    const q=query(collection(db,"encargos"),orderBy("fecha","desc"));
+    return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()}))));
+  }, []);
+
   if (cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"Inter"}}>Cargando...</div>;
   if (!usuario) return <Login />;
-  if (usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={data.encargos} />;
+  if (usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} />;
 
   return (
     <>
@@ -1082,12 +1039,12 @@ export default function App() {
           </div>
         </div>
         <div style={{flex:1,padding:32,overflowY:"auto",maxHeight:"100vh"}}>
-          {section==="dashboard"&&<Dashboard data={data} manuales={manuales} fichajes={fichajes} trabajadores={trabajadores}/>}
+          {section==="dashboard"&&<Dashboard encargos={encargos} manuales={manuales} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes}/>}
           {section==="usuarios"&&<GestionUsuarios trabajadores={trabajadores}/>}
           {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT}/>}
-          {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes} cargando={false}/>}
-          {section==="encargos"&&<Encargos encargos={data.encargos} setEncargos={setEncargos} trabajadores={trabajadores}/>}
-          {section==="albaranes"&&<Albaranes albaranes={data.albaranes} setAlbaranes={setAlbaranes}/>}
+          {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
+          {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
+          {section==="albaranes"&&<Albaranes albaranes={albaranes} setAlbaranes={setAlbaranes}/>}
           {section==="manuales"&&<Manuales onManualesChange={setManuales}/>}
         </div>
       </div>
