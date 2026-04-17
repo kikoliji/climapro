@@ -79,6 +79,29 @@ function horaActual() {
   return `${String(ahora.getHours()).padStart(2,"0")}:${String(ahora.getMinutes()).padStart(2,"0")}`;
 }
 
+// ─── GPS ──────────────────────────────────────────────────────────────────────
+function obtenerUbicacion() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, precision: Math.round(pos.coords.accuracy) }),
+      () => resolve(null),
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  });
+}
+
+function LinkMapa({ lat, lng, precision }) {
+  if (!lat || !lng) return <span style={{ fontSize:11, color:COLORS.muted }}>Sin ubicación</span>;
+  const url = `https://www.google.com/maps?q=${lat},${lng}`;
+  return (
+    <a href={url} target="_blank" rel="noreferrer"
+      style={{ fontSize:11, color:COLORS.accent, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4 }}>
+      📍 Ver mapa {precision ? `(±${precision}m)` : ""}
+    </a>
+  );
+}
+
 function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const ahora = new Date();
@@ -109,7 +132,7 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
   pdf.text(`Total horas: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 120, 60);
   pdf.text(`Generado: ${ahora.toLocaleDateString("es-ES")} ${ahora.toLocaleTimeString("es-ES")}`, 120, 67);
   pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 30, 30);
-  pdf.text("REGISTROS DE JORNADA (HORARIO PARTIDO)", 14, 85);
+  pdf.text("REGISTROS DE JORNADA", 14, 85);
   pdf.line(14, 87, 196, 87);
 
   if (registros.length === 0) {
@@ -122,24 +145,26 @@ function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
       const fechaObj = new Date(fecha + "T00:00:00");
       const dia = fechaObj.toLocaleDateString("es-ES", { weekday: "short" });
       tramos.forEach((f, i) => {
+        const ubEntrada = f.ubicacionEntrada ? `${f.ubicacionEntrada.lat.toFixed(4)},${f.ubicacionEntrada.lng.toFixed(4)}` : "—";
+        const ubSalida = f.ubicacionSalida ? `${f.ubicacionSalida.lat.toFixed(4)},${f.ubicacionSalida.lng.toFixed(4)}` : "—";
         rows.push([
           i === 0 ? fecha : "",
           i === 0 ? dia.charAt(0).toUpperCase() + dia.slice(1) : "",
-          `Tramo ${i+1}`, f.entrada||"—", f.salida||"—",
+          `T${i+1}`, f.entrada||"—", f.salida||"—",
           calcHoras(f.entrada, f.salida),
           i === tramos.length-1 ? `${Math.floor(totalDia/60)}h ${totalDia%60}m` : "",
-          f.notas||""
+          ubEntrada
         ]);
       });
     });
     autoTable(pdf, {
       startY: 92,
-      head: [["Fecha","Día","Tramo","Entrada","Salida","Horas","Total día","Notas"]],
+      head: [["Fecha","Día","T.","Entrada","Salida","Horas","Total día","GPS entrada"]],
       body: rows,
-      headStyles: { fillColor:[15,17,23], textColor:[0,196,255], fontStyle:"bold", fontSize:8 },
-      bodyStyles: { fontSize:8, textColor:[50,50,50] },
+      headStyles: { fillColor:[15,17,23], textColor:[0,196,255], fontStyle:"bold", fontSize:7 },
+      bodyStyles: { fontSize:7, textColor:[50,50,50] },
       alternateRowStyles: { fillColor:[245,247,250] },
-      columnStyles: { 0:{cellWidth:24},1:{cellWidth:14},2:{cellWidth:18},3:{cellWidth:18},4:{cellWidth:18},5:{cellWidth:18},6:{cellWidth:20},7:{cellWidth:"auto"} },
+      columnStyles: { 0:{cellWidth:22},1:{cellWidth:12},2:{cellWidth:10},3:{cellWidth:16},4:{cellWidth:16},5:{cellWidth:16},6:{cellWidth:18},7:{cellWidth:"auto"} },
       margin: { left:14, right:14 },
     });
   }
@@ -193,20 +218,15 @@ function Login() {
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const [fichando, setFichando] = useState(false);
+  const [mensajeGPS, setMensajeGPS] = useState("");
   const hoy = new Date().toISOString().split("T")[0];
 
   const misFichajesHoy = fichajes
     .filter(f => f.trabajador === usuarioInfo.nombre && f.fecha === hoy)
     .sort((a, b) => (a.entrada||"").localeCompare(b.entrada||""));
 
-  const misUltimos = fichajes
-    .filter(f => f.trabajador === usuarioInfo.nombre)
-    .slice(0, 20);
-
-  const misEncargos = encargos.filter(e =>
-    e.asignado === usuarioInfo.nombre &&
-    e.estado !== "Completado" && e.estado !== "Cancelado"
-  );
+  const misUltimos = fichajes.filter(f => f.trabajador === usuarioInfo.nombre).slice(0, 20);
+  const misEncargos = encargos.filter(e => e.asignado === usuarioInfo.nombre && e.estado !== "Completado" && e.estado !== "Cancelado");
 
   const ultimoTramo = misFichajesHoy[misFichajesHoy.length - 1];
   const hayTramoAbierto = ultimoTramo != null && (!ultimoTramo.salida || ultimoTramo.salida === "");
@@ -214,22 +234,42 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
 
   const ficharEntrada = async () => {
     setFichando(true);
+    setMensajeGPS("Obteniendo ubicación...");
+    const ubicacion = await obtenerUbicacion();
+    if (ubicacion) {
+      setMensajeGPS("📍 Ubicación registrada");
+    } else {
+      setMensajeGPS("⚠ No se pudo obtener ubicación");
+    }
     await addDoc(collection(db, "fichajes"), {
       trabajador: usuarioInfo.nombre,
       fecha: hoy,
       entrada: horaActual(),
       salida: "",
       notas: "",
-      tramo: misFichajesHoy.length + 1
+      tramo: misFichajesHoy.length + 1,
+      ubicacionEntrada: ubicacion,
     });
     setFichando(false);
+    setTimeout(() => setMensajeGPS(""), 3000);
   };
 
   const ficharSalida = async () => {
     if (!ultimoTramo) return;
     setFichando(true);
-    await updateDoc(doc(db, "fichajes", ultimoTramo.id), { salida: horaActual() });
+    setMensajeGPS("Obteniendo ubicación...");
+    const ubicacion = await obtenerUbicacion();
+    if (ubicacion) {
+      setMensajeGPS("📍 Ubicación registrada");
+    } else {
+      setMensajeGPS("⚠ No se pudo obtener ubicación");
+    }
+    await updateDoc(doc(db, "fichajes", ultimoTramo.id), {
+      salida: horaActual(),
+      ubicacionSalida: ubicacion,
+    });
     setFichando(false);
+    setTimeout(() => setMensajeGPS(""), 3000);
   };
 
   const porFecha = {};
@@ -268,41 +308,36 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                   <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>
                     {f.salida || "en curso..."}
                   </span>
-                  {f.salida
-                    ? <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>
-                    : <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>
-                  }
+                  {f.salida && <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>}
+                  {!f.salida && <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>}
+                  {f.ubicacionEntrada && (
+                    <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />
+                  )}
                 </div>
               ))}
             </div>
           )}
 
-          <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
             {!hayTramoAbierto && (
-              <button
-                className="btn btn-primary"
-                style={{ padding:"12px 32px", fontSize:15 }}
-                onClick={ficharEntrada}
-                disabled={fichando}
-              >
+              <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
                 {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Entrada" : "🟢 Inicio tramo tarde"}
               </button>
             )}
             {hayTramoAbierto && (
-              <button
-                className="btn"
-                style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }}
-                onClick={ficharSalida}
-                disabled={fichando}
-              >
+              <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
                 {fichando ? "Registrando..." : "🔴 Salida"}
               </button>
             )}
+            {mensajeGPS && (
+              <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{mensajeGPS}</div>
+            )}
+            {misFichajesHoy.length === 0 && !fichando && (
+              <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>
+                📍 Se registrará tu ubicación al fichar
+              </div>
+            )}
           </div>
-
-          {misFichajesHoy.length === 0 && (
-            <div style={{ textAlign:"center", fontSize:13, color:COLORS.muted, marginTop:12 }}>No has fichado hoy todavía</div>
-          )}
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
@@ -629,7 +664,7 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
                 </div>
                 <div style={{display:"grid",gap:6}}>
                   {g.tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f,i)=>(
-                    <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"6px 12px",background:COLORS.surface,borderRadius:8}}>
+                    <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px",background:COLORS.surface,borderRadius:8,flexWrap:"wrap"}}>
                       <span style={{fontSize:12,color:COLORS.muted,minWidth:55}}>Tramo {i+1}</span>
                       <span style={{fontSize:13,color:COLORS.green}}>{f.entrada}</span>
                       <span style={{color:COLORS.muted}}>→</span>
@@ -637,6 +672,16 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
                         {f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"2px 8px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}
                       </span>
                       {f.salida&&<span style={{fontSize:12,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span>}
+                      {f.ubicacionEntrada && (
+                        <span style={{marginLeft:4}}>
+                          <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />
+                        </span>
+                      )}
+                      {f.ubicacionSalida && (
+                        <span style={{marginLeft:4,fontSize:11,color:COLORS.muted}}>
+                          salida: <a href={`https://www.google.com/maps?q=${f.ubicacionSalida.lat},${f.ubicacionSalida.lng}`} target="_blank" rel="noreferrer" style={{color:COLORS.warm,textDecoration:"none"}}>📍 ver</a>
+                        </span>
+                      )}
                       {f.notas&&<span style={{fontSize:11,color:COLORS.muted,fontStyle:"italic",flex:1}}>"{f.notas}"</span>}
                       <button className="btn btn-danger" style={{marginLeft:"auto"}} onClick={()=>setConfirmarEliminar(f)}>🗑</button>
                     </div>
@@ -650,15 +695,20 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
         <div className="card" style={{overflow:"hidden"}}>
           {cargando?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>Cargando...</div>:lista.length===0?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hay fichajes</div>:(
             <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Trabajador","Fecha","Entrada","Salida","Horas","Notas",""].map((h,i)=><th key={i} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+              <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Trabajador","Fecha","Entrada","GPS","Salida","Horas",""].map((h,i)=><th key={i} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
               <tbody>{lista.map(f=>(
                 <tr key={f.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
                   <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{f.trabajador}</td>
                   <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{f.fecha}</td>
                   <td style={{padding:"12px 16px",fontSize:13,color:COLORS.green}}>{f.entrada}</td>
+                  <td style={{padding:"12px 16px"}}>
+                    {f.ubicacionEntrada
+                      ? <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />
+                      : <span style={{fontSize:11,color:COLORS.muted}}>—</span>
+                    }
+                  </td>
                   <td style={{padding:"12px 16px",fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>registrarSalida(f)}>Registrar salida</button>}</td>
                   <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
-                  <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted}}>{f.notas||"—"}</td>
                   <td style={{padding:"12px 16px"}}><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(f)}>🗑</button></td>
                 </tr>
               ))}</tbody>
@@ -669,7 +719,7 @@ function Fichajes({ trabajadores, fichajes, cargando }) {
 
       {modalPDF&&<Modal title="📄 Informe PDF — Últimos 4 años" onClose={()=>setModalPDF(false)}>
         <div style={{display:"grid",gap:16}}>
-          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>.</div>
+          <div style={{background:"rgba(0,196,255,0.08)",border:`1px solid ${COLORS.accent}33`,borderRadius:10,padding:14,fontSize:13,color:COLORS.muted}}>Genera un PDF cumpliendo el <strong style={{color:COLORS.accent}}>RDL 8/2019</strong>. Incluye coordenadas GPS de cada fichaje.</div>
           <div><label>Trabajador</label><select className="select" style={{width:"100%"}} value={trabajadorPDF} onChange={e=>setTrabajadorPDF(e.target.value)}>{todosNombres.map(t=><option key={t}>{t}</option>)}</select></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModalPDF(false)}>Cancelar</button>
@@ -932,9 +982,12 @@ function Dashboard({ data, manuales, fichajes, trabajadores }) {
         <div className="card" style={{padding:20}}>
           <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.accent}}>⏱ Fichajes de hoy</div>
           {fichajesHoyList.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sin fichajes hoy</div>:fichajesHoyList.map(f=>(
-            <div key={f.id} style={{padding:"6px 0",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between"}}>
+            <div key={f.id} style={{padding:"6px 0",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:13,fontWeight:500}}>{f.trabajador}</span>
-              <span style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."} <span style={{color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</span></span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."}</span>
+                {f.ubicacionEntrada && <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} />}
+              </div>
             </div>
           ))}
         </div>
