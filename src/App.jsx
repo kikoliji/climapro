@@ -11,6 +11,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import axios from "axios";
+import * as XLSX from "xlsx";
 
 const COLORS = {
   bg: "#0f1117", surface: "#1a1d27", card: "#1e2130", border: "#2a2d3e",
@@ -19,7 +20,6 @@ const COLORS = {
   text: "#e8eaf0", muted: "#8b8fa8", danger: "#ff4757",
 };
 
-// ─── CLOUDINARY CONFIG ────────────────────────────────────────────────────────
 const CLOUDINARY_CLOUD = "dekjrcfef";
 const CLOUDINARY_PRESET = "climapro";
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`;
@@ -95,13 +95,38 @@ function LinkMapa({ lat, lng, precision }) {
   );
 }
 
-// ─── SUBIR FOTO A CLOUDINARY ──────────────────────────────────────────────────
 async function subirFoto(archivo) {
   const formData = new FormData();
   formData.append("file", archivo);
   formData.append("upload_preset", CLOUDINARY_PRESET);
   const res = await axios.post(CLOUDINARY_URL, formData);
   return res.data.secure_url;
+}
+
+// ─── PARSEAR FECHA EXCEL ──────────────────────────────────────────────────────
+function parsearFecha(valor) {
+  if (!valor) return "";
+  // Si es número (fecha serial de Excel)
+  if (typeof valor === "number") {
+    const fecha = XLSX.SSF.parse_date_code(valor);
+    if (fecha) {
+      const m = String(fecha.m).padStart(2,"0");
+      const d = String(fecha.d).padStart(2,"0");
+      return `${fecha.y}-${m}-${d}`;
+    }
+  }
+  // Si es string, intentar convertir
+  if (typeof valor === "string" && valor.trim()) {
+    // Formato DD/MM/YYYY o DD-MM-YYYY
+    const partes = valor.trim().split(/[\/\-\.]/);
+    if (partes.length === 3) {
+      const [a, b, c] = partes;
+      if (c.length === 4) return `${c}-${b.padStart(2,"0")}-${a.padStart(2,"0")}`;
+      if (a.length === 4) return `${a}-${b.padStart(2,"0")}-${c.padStart(2,"0")}`;
+    }
+    return valor.trim();
+  }
+  return String(valor);
 }
 
 function generarPDFHorario(trabajador, fichajes, empresa = "ClimaPro") {
@@ -290,8 +315,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const porFecha = {};
   misUltimos.forEach(f => { if (!porFecha[f.fecha]) porFecha[f.fecha] = []; porFecha[f.fecha].push(f); });
 
-  const colorEstado = { "Pendiente": COLORS.yellow, "En curso": COLORS.accent, "Completado": COLORS.green, "Cancelado": COLORS.danger };
-
   return (
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
       <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}`, padding:"16px 24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -301,9 +324,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => signOut(auth)}>Salir</button>
         </div>
       </div>
-
       <div style={{ padding:24, maxWidth:860, margin:"0 auto" }}>
-        {/* FICHAR */}
         <div className="card" style={{ padding:28, marginBottom:24, borderTop:`3px solid ${COLORS.accent}` }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
             <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700 }}>
@@ -342,7 +363,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           </div>
         </div>
 
-        {/* ENCARGOS */}
         <div className="card" style={{ padding:20, marginBottom:24 }}>
           <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
           {misEncargos.length === 0
@@ -351,23 +371,17 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
               <div key={e.id} style={{ padding:"14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
                 <div style={{ flex:1 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                    <EstadoBadge estado={e.prioridad} />
-                    <EstadoBadge estado={e.estado} />
+                    <EstadoBadge estado={e.prioridad} /><EstadoBadge estado={e.estado} />
                   </div>
                   <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>{e.titulo}</div>
-                  <div style={{ fontSize:12, color:COLORS.muted }}>{e.cliente} · {e.fecha}</div>
+                  <div style={{ fontSize:12, color:COLORS.muted }}>
+                    {e.cliente}{e.localidad ? ` · ${e.localidad}` : ""}{e.fecha ? ` · ${e.fecha}` : ""}
+                  </div>
+                  {e.direccion && <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>📍 {e.direccion}</div>}
+                  {e.telefono && <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>📱 {e.telefono}</div>}
                   {e.notasTrabajador && (
                     <div style={{ fontSize:12, color:COLORS.yellow, marginTop:6, background:"rgba(255,214,0,.08)", padding:"6px 10px", borderRadius:6 }}>
                       ⚠ Falta: {e.notasTrabajador}
-                    </div>
-                  )}
-                  {e.fotos && e.fotos.length > 0 && (
-                    <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
-                      {e.fotos.map((url, i) => (
-                        <a key={i} href={url} target="_blank" rel="noreferrer">
-                          <img src={url} alt={`foto ${i+1}`} style={{ width:60, height:60, objectFit:"cover", borderRadius:6, border:`1px solid ${COLORS.border}` }} />
-                        </a>
-                      ))}
                     </div>
                   )}
                 </div>
@@ -379,7 +393,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           }
         </div>
 
-        {/* HISTORIAL */}
         <div className="card" style={{ padding:20 }}>
           <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
           {Object.keys(porFecha).length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
@@ -401,14 +414,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             })}
         </div>
       </div>
-
-      {/* MODAL GESTIONAR ENCARGO */}
-      {encargoSeleccionado && (
-        <GestionarEncargo
-          encargo={encargoSeleccionado}
-          onClose={() => setEncargoSeleccionado(null)}
-        />
-      )}
+      {encargoSeleccionado && <GestionarEncargo encargo={encargoSeleccionado} onClose={() => setEncargoSeleccionado(null)} />}
     </div>
   );
 }
@@ -430,31 +436,26 @@ function GestionarEncargo({ encargo, onClose }) {
       const url = await subirFoto(archivos[i]);
       urls.push(url);
     }
-    setFotos(urls);
-    setSubiendo(false);
-    setProgreso("");
+    setFotos(urls); setSubiendo(false); setProgreso("");
   };
 
   const guardar = async () => {
     setGuardando(true);
-    await updateDoc(doc(db, "encargos", encargo.id), {
-      estado,
-      notasTrabajador: notas,
-      fotos,
-    });
-    setGuardando(false);
-    onClose();
+    await updateDoc(doc(db, "encargos", encargo.id), { estado, notasTrabajador: notas, fotos });
+    setGuardando(false); onClose();
   };
 
   return (
     <Modal title={`Gestionar: ${encargo.titulo}`} onClose={onClose} wide>
       <div style={{ display:"grid", gap:16 }}>
         <div style={{ background:COLORS.surface, padding:12, borderRadius:8 }}>
-          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:4 }}>Cliente: {encargo.cliente} · Fecha: {encargo.fecha}</div>
-          {encargo.notas && <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic" }}>Nota admin: "{encargo.notas}"</div>}
+          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:4 }}>
+            Cliente: {encargo.cliente}{encargo.localidad ? ` · ${encargo.localidad}` : ""}{encargo.fecha ? ` · ${encargo.fecha}` : ""}
+          </div>
+          {encargo.direccion && <div style={{ fontSize:12, color:COLORS.muted }}>📍 {encargo.direccion}</div>}
+          {encargo.telefono && <div style={{ fontSize:12, color:COLORS.muted }}>📱 {encargo.telefono}</div>}
+          {encargo.notas && <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginTop:4 }}>Nota admin: "{encargo.notas}"</div>}
         </div>
-
-        {/* Estado */}
         <div>
           <label>Estado del encargo</label>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -468,20 +469,10 @@ function GestionarEncargo({ encargo, onClose }) {
             ))}
           </div>
         </div>
-
-        {/* Notas materiales */}
         <div>
           <label>⚠ Materiales o recambios que faltan</label>
-          <textarea
-            className="input"
-            placeholder="Ej: Falta válvula de expansión, filtro G4, cable de 3x2.5..."
-            value={notas}
-            onChange={e => setNotas(e.target.value)}
-            style={{ minHeight:80, resize:"vertical" }}
-          />
+          <textarea className="input" placeholder="Ej: Falta válvula de expansión, filtro G4..." value={notas} onChange={e => setNotas(e.target.value)} style={{ minHeight:80, resize:"vertical" }} />
         </div>
-
-        {/* Fotos */}
         <div>
           <label>📷 Fotos del trabajo realizado</label>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
@@ -499,15 +490,12 @@ function GestionarEncargo({ encargo, onClose }) {
             </label>
             <input id="foto-input" type="file" accept="image/*" multiple style={{ display:"none" }}
               onChange={e => subirFotos(Array.from(e.target.files))} disabled={subiendo} />
-            <span style={{ fontSize:12, color:COLORS.muted }}>{fotos.length} foto{fotos.length!==1?"s":""} subida{fotos.length!==1?"s":""}</span>
+            <span style={{ fontSize:12, color:COLORS.muted }}>{fotos.length} foto{fotos.length!==1?"s":""}</span>
           </div>
         </div>
-
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={guardar} disabled={guardando||subiendo}>
-            {guardando ? "Guardando..." : "Guardar cambios"}
-          </button>
+          <button className="btn btn-primary" onClick={guardar} disabled={guardando||subiendo}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
         </div>
       </div>
     </Modal>
@@ -791,7 +779,7 @@ function Fichajes({ trabajadores, fichajes }) {
   );
 }
 
-// ─── ENCARGOS con Firebase (admin) ───────────────────────────────────────────
+// ─── ENCARGOS con Firebase + Importación Smartsheet ──────────────────────────
 function Encargos({ trabajadores }) {
   const [encargos, setEncargos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -801,8 +789,10 @@ function Encargos({ trabajadores }) {
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [filtro, setFiltro] = useState("Todos");
+  const [importando, setImportando] = useState(false);
+  const [resultadoImport, setResultadoImport] = useState(null);
   const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
-  const emptyForm = { titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"" };
+  const emptyForm = { titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"", localidad:"", direccion:"", telefono:"" };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
@@ -811,7 +801,11 @@ function Encargos({ trabajadores }) {
   }, []);
 
   const abrirNuevo = () => { setEditando(null); setForm(emptyForm); setModal(true); };
-  const abrirEditar = (e) => { setEditando(e); setForm({ titulo:e.titulo, cliente:e.cliente, asignado:e.asignado||"", prioridad:e.prioridad, estado:e.estado, fecha:e.fecha, notas:e.notas||"" }); setModal(true); };
+  const abrirEditar = (e) => {
+    setEditando(e);
+    setForm({ titulo:e.titulo, cliente:e.cliente, asignado:e.asignado||"", prioridad:e.prioridad, estado:e.estado, fecha:e.fecha, notas:e.notas||"", localidad:e.localidad||"", direccion:e.direccion||"", telefono:e.telefono||"" });
+    setModal(true);
+  };
   const guardar = async () => {
     if (!form.titulo) return; setGuardando(true);
     if (editando) await updateDoc(doc(db,"encargos",editando.id), form);
@@ -820,11 +814,96 @@ function Encargos({ trabajadores }) {
   };
   const eliminar = async (id) => { await deleteDoc(doc(db,"encargos",id)); setConfirmarEliminar(null); };
   const cambiarEstado = async (id, estado) => { await updateDoc(doc(db,"encargos",id), { estado }); };
+
+  // ─── IMPORTAR SMARTSHEET ────────────────────────────────────────────────────
+  const importarSmartsheet = async (archivo) => {
+    setImportando(true);
+    setResultadoImport(null);
+    try {
+      const buffer = await archivo.arrayBuffer();
+      const wb = XLSX.read(buffer, { type:"array", cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(ws, { defval:"" });
+
+      let importados = 0;
+      let saltados = 0;
+      const errores = [];
+
+      for (const fila of filas) {
+        // Mapeo de columnas de Smartsheet → ClimaPro
+        const titulo = String(fila["ENCÀRREC / COMENTARI"] || fila["ENCARGO / COMENTARI"] || fila["ENCARGO"] || "").trim();
+        const cliente = String(fila["CLIENT"] || fila["CLIENTE"] || "").trim();
+        const fecha = parsearFecha(fila["DATA"] || fila["FECHA"] || fila["DATA ENCARREC"] || "");
+        const asignado = String(fila["ASSIGNAT"] || fila["ASIGNADO"] || "").trim();
+        const localidad = String(fila["Localitat"] || fila["LOCALITAT"] || fila["Localidad"] || "").trim();
+        const direccion = String(fila["DIRECCIÓ"] || fila["DIRECCION"] || fila["DIRECCIÓN"] || "").trim();
+        const telefono = String(fila["TELÈFON"] || fila["TELEFON"] || fila["TELÉFONO"] || "").trim();
+        const notas = String(fila["Comentarios"] || fila["COMENTARIS"] || "").trim();
+
+        // Saltar filas vacías
+        if (!titulo && !cliente) { saltados++; continue; }
+
+        try {
+          await addDoc(collection(db,"encargos"), {
+            titulo: titulo || `Encargo ${cliente}`,
+            cliente,
+            asignado,
+            localidad,
+            direccion,
+            telefono,
+            notas,
+            fecha,
+            prioridad: "Media",
+            estado: "Pendiente",
+          });
+          importados++;
+        } catch(e) {
+          errores.push(titulo || cliente);
+        }
+      }
+
+      setResultadoImport({ importados, saltados, errores });
+    } catch(e) {
+      setResultadoImport({ error: "No se pudo leer el archivo. Asegúrate de que es un .xlsx de Smartsheet." });
+    }
+    setImportando(false);
+  };
+
   const lista = filtro==="Todos" ? encargos : encargos.filter(e=>e.estado===filtro);
 
   return (
     <div>
-      <Header title="Encargos ☁" onAdd={abrirNuevo} addLabel="+ Nuevo encargo" />
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,flexWrap:"wrap",gap:12}}>
+        <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Encargos ☁</h2>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {/* BOTÓN IMPORTAR SMARTSHEET */}
+          <label className="btn btn-ghost" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+            {importando ? "⏳ Importando..." : "📊 Importar Smartsheet"}
+            <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
+              onChange={e => e.target.files[0] && importarSmartsheet(e.target.files[0])}
+              disabled={importando} />
+          </label>
+          <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo encargo</button>
+        </div>
+      </div>
+
+      {/* RESULTADO IMPORTACIÓN */}
+      {resultadoImport && (
+        <div style={{marginBottom:20, padding:16, borderRadius:10, background: resultadoImport.error ? "rgba(255,71,87,.1)" : "rgba(0,230,118,.1)", border:`1px solid ${resultadoImport.error ? COLORS.danger : COLORS.green}`}}>
+          {resultadoImport.error
+            ? <div style={{color:COLORS.danger,fontSize:13}}>❌ {resultadoImport.error}</div>
+            : <>
+                <div style={{color:COLORS.green,fontSize:13,fontWeight:600}}>✅ Importación completada</div>
+                <div style={{fontSize:12,color:COLORS.muted,marginTop:4}}>
+                  {resultadoImport.importados} encargos importados · {resultadoImport.saltados} filas vacías saltadas
+                  {resultadoImport.errores.length > 0 && ` · ${resultadoImport.errores.length} errores`}
+                </div>
+              </>
+          }
+          <button className="btn btn-ghost" style={{fontSize:11,padding:"3px 8px",marginTop:8}} onClick={()=>setResultadoImport(null)}>✕</button>
+        </div>
+      )}
+
       {cargando ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div> : (
         <>
           <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
@@ -838,13 +917,16 @@ function Encargos({ trabajadores }) {
                   <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
                     <div>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-                        <EstadoBadge estado={e.prioridad}/>
-                        <EstadoBadge estado={e.estado}/>
+                        <EstadoBadge estado={e.prioridad}/><EstadoBadge estado={e.estado}/>
                         {e.notasTrabajador && <span className="badge" style={{background:"rgba(255,214,0,.15)",color:COLORS.yellow}}>⚠ Falta material</span>}
                         {e.fotos && e.fotos.length > 0 && <span className="badge" style={{background:"rgba(0,230,118,.15)",color:COLORS.green}}>📷 {e.fotos.length} foto{e.fotos.length!==1?"s":""}</span>}
                       </div>
                       <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
-                      <div style={{fontSize:12,color:COLORS.muted}}>Cliente: {e.cliente} · Asignado: {e.asignado||"—"} · Fecha: {e.fecha}</div>
+                      <div style={{fontSize:12,color:COLORS.muted}}>
+                        {e.cliente}{e.localidad ? ` · ${e.localidad}` : ""}{e.asignado ? ` · ${e.asignado}` : " · Sin asignar"} · {e.fecha}
+                      </div>
+                      {e.direccion && <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>📍 {e.direccion}</div>}
+                      {e.telefono && <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>📱 {e.telefono}</div>}
                       {e.notasTrabajador && (
                         <div style={{fontSize:12,color:COLORS.yellow,marginTop:6,background:"rgba(255,214,0,.08)",padding:"6px 10px",borderRadius:6}}>
                           ⚠ Trabajador informa: {e.notasTrabajador}
@@ -870,7 +952,6 @@ function Encargos({ trabajadores }) {
         </>
       )}
 
-      {/* Modal ver detalle fotos y notas */}
       {verDetalle && (
         <Modal title={`Detalle: ${verDetalle.titulo}`} onClose={()=>setVerDetalle(null)} wide>
           <div style={{display:"grid",gap:16}}>
@@ -888,7 +969,7 @@ function Encargos({ trabajadores }) {
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginTop:8}}>
                   {verDetalle.fotos.map((url,i)=>(
                     <a key={i} href={url} target="_blank" rel="noreferrer">
-                      <img src={url} alt={`foto ${i+1}`} style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8,border:`1px solid ${COLORS.border}`,cursor:"pointer"}} />
+                      <img src={url} alt={`foto ${i+1}`} style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8,border:`1px solid ${COLORS.border}`}} />
                     </a>
                   ))}
                 </div>
@@ -908,12 +989,17 @@ function Encargos({ trabajadores }) {
             <div><label>Cliente</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
             <div><label>Fecha prevista</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
           </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div><label>Localidad</label><input className="input" value={form.localidad} onChange={e=>setForm({...form,localidad:e.target.value})} /></div>
+            <div><label>Teléfono</label><input className="input" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
+          </div>
+          <div><label>Dirección</label><input className="input" value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
             <div><label>Asignado</label><select className="select" style={{width:"100%"}} value={form.asignado} onChange={e=>setForm({...form,asignado:e.target.value})}><option value="">Sin asignar</option>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
             <div><label>Prioridad</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}</select></div>
             <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
-          <div><label>Notas para el trabajador</label><input className="input" placeholder="Instrucciones, acceso, observaciones..." value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
+          <div><label>Notas para el trabajador</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardando...":editando?"Guardar cambios":"Crear encargo"}</button>
@@ -1144,7 +1230,7 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
           {urgentes.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sin encargos urgentes</div>:urgentes.map(e=>(
             <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
               <div style={{fontSize:13,fontWeight:500}}>{e.titulo}</div>
-              <div style={{fontSize:12,color:COLORS.muted,marginTop:3}}>{e.asignado||"Sin asignar"} · {e.fecha}</div>
+              <div style={{fontSize:12,color:COLORS.muted,marginTop:3}}>{e.asignado||"Sin asignar"} · {e.localidad||e.fecha}</div>
             </div>
           ))}
         </div>
