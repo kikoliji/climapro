@@ -47,6 +47,8 @@ const STYLE = `
   .folder-row { display:flex; align-items:center; gap:10; padding:12px 16px; cursor:pointer; border-radius:10px; transition:background .15s; }
   .folder-row:hover { background:rgba(0,196,255,0.07); }
   tr:hover td { background:rgba(255,255,255,0.02); }
+  .foto-thumb { cursor:pointer; transition:transform .15s; }
+  .foto-thumb:hover { transform:scale(1.05); }
 `;
 
 const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
@@ -92,6 +94,57 @@ function LinkMapa({ lat, lng, precision }) {
       style={{ fontSize:11, color:COLORS.accent, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4 }}>
       📍 Ver mapa {precision ? `(±${precision}m)` : ""}
     </a>
+  );
+}
+
+// ─── DIRECCIÓN CLICABLE → GOOGLE MAPS ────────────────────────────────────────
+function DireccionMaps({ direccion, localidad }) {
+  if (!direccion && !localidad) return null;
+  const query = encodeURIComponent(`${direccion || ""} ${localidad || ""}`.trim());
+  return (
+    <a href={`https://www.google.com/maps/search/?api=1&query=${query}`} target="_blank" rel="noreferrer"
+      style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:5 }}>
+      📍 {direccion || localidad}
+    </a>
+  );
+}
+
+// ─── LIGHTBOX FOTOS ───────────────────────────────────────────────────────────
+function Lightbox({ fotos, indice, onClose }) {
+  const [actual, setActual] = useState(indice);
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") setActual(a => Math.min(a + 1, fotos.length - 1));
+      if (e.key === "ArrowLeft") setActual(a => Math.max(a - 1, 0));
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [fotos, onClose]);
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ position:"relative", maxWidth:"90vw", maxHeight:"80vh" }}>
+        <img src={fotos[actual]} alt={`foto ${actual+1}`} style={{ maxWidth:"90vw", maxHeight:"80vh", objectFit:"contain", borderRadius:12 }} />
+        {fotos.length > 1 && (
+          <>
+            <button onClick={e=>{e.stopPropagation();setActual(a=>Math.max(a-1,0));}}
+              style={{ position:"absolute", left:-48, top:"50%", transform:"translateY(-50%)", background:"rgba(255,255,255,.15)", border:"none", color:"#fff", fontSize:24, width:40, height:40, borderRadius:"50%", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+            <button onClick={e=>{e.stopPropagation();setActual(a=>Math.min(a+1,fotos.length-1));}}
+              style={{ position:"absolute", right:-48, top:"50%", transform:"translateY(-50%)", background:"rgba(255,255,255,.15)", border:"none", color:"#fff", fontSize:24, width:40, height:40, borderRadius:"50%", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+          </>
+        )}
+      </div>
+      <div style={{ color:"rgba(255,255,255,.6)", fontSize:13 }}>{actual+1} / {fotos.length} · Pulsa ESC para cerrar</div>
+      {fotos.length > 1 && (
+        <div style={{ display:"flex", gap:8 }}>
+          {fotos.map((url, i) => (
+            <img key={i} src={url} alt="" onClick={e=>{e.stopPropagation();setActual(i);}}
+              style={{ width:50, height:50, objectFit:"cover", borderRadius:6, cursor:"pointer", opacity: i===actual?1:0.5, border: i===actual?`2px solid ${COLORS.accent}`:"2px solid transparent" }} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -235,7 +288,7 @@ function Login() {
 function Modal({ title, onClose, children, wide }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}>
-      <div className="card" style={{ width:"100%", maxWidth: wide ? 700 : 520, padding:24, margin:"auto" }}>
+      <div className="card" style={{ width:"100%", maxWidth: wide ? 720 : 540, padding:24, margin:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
           <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
@@ -269,6 +322,129 @@ function Header({ title, onAdd, addLabel }) {
   );
 }
 
+// ─── GESTIONAR ENCARGO (trabajador) ──────────────────────────────────────────
+function GestionarEncargo({ encargo, onClose }) {
+  const [estado, setEstado] = useState(encargo.estado);
+  const [notas, setNotas] = useState(encargo.notasTrabajador || "");
+  const [fotos, setFotos] = useState(encargo.fotos || []);
+  const [subiendo, setSubiendo] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [progreso, setProgreso] = useState("");
+  const [lightbox, setLightbox] = useState(null);
+
+  const subirFotos = async (archivos) => {
+    setSubiendo(true);
+    const urls = [...fotos];
+    for (let i = 0; i < archivos.length; i++) {
+      setProgreso(`Subiendo foto ${i+1} de ${archivos.length}...`);
+      const url = await subirFoto(archivos[i]);
+      urls.push(url);
+    }
+    setFotos(urls); setSubiendo(false); setProgreso("");
+  };
+
+  const guardar = async () => {
+    setGuardando(true);
+    const ahora = new Date().toISOString().split("T")[0];
+    await updateDoc(doc(db, "encargos", encargo.id), {
+      estado,
+      notasTrabajador: notas,
+      fotos,
+      fechaCompletado: estado === "Completado" ? ahora : null,
+    });
+    setGuardando(false); onClose();
+  };
+
+  return (
+    <>
+      <Modal title={`✏ ${encargo.titulo}`} onClose={onClose} wide>
+        <div style={{ display:"grid", gap:16 }}>
+          {/* INFO ENCARGO */}
+          <div style={{ background:COLORS.surface, padding:14, borderRadius:10, display:"grid", gap:6 }}>
+            <div style={{ fontSize:13, color:COLORS.text, fontWeight:500 }}>{encargo.cliente}</div>
+            {(encargo.direccion || encargo.localidad) && (
+              <DireccionMaps direccion={encargo.direccion} localidad={encargo.localidad} />
+            )}
+            {encargo.telefono && (
+              <a href={`tel:${encargo.telefono}`} style={{ fontSize:12, color:COLORS.accent, textDecoration:"none" }}>📱 {encargo.telefono}</a>
+            )}
+            {encargo.notas && <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic" }}>📋 {encargo.notas}</div>}
+          </div>
+
+          {/* ESTADO — MÁS VISUAL */}
+          <div>
+            <label>Estado del encargo</label>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:6 }}>
+              {[
+                { s:"Pendiente", icon:"⏳", color:COLORS.yellow },
+                { s:"En curso", icon:"🔄", color:COLORS.accent },
+                { s:"Completado", icon:"✅", color:COLORS.green },
+              ].map(({ s, icon, color }) => (
+                <button key={s} onClick={() => setEstado(s)}
+                  style={{
+                    padding:"14px 8px", borderRadius:12, cursor:"pointer", border:"none",
+                    background: estado===s ? color : COLORS.surface,
+                    color: estado===s ? "#000" : COLORS.muted,
+                    fontSize:13, fontWeight:700, fontFamily:"Inter",
+                    outline: estado===s ? `3px solid ${color}` : `1px solid ${COLORS.border}`,
+                    display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                    transition:"all .15s",
+                    transform: estado===s ? "scale(1.04)" : "scale(1)",
+                  }}>
+                  <span style={{ fontSize:22 }}>{icon}</span>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* NOTAS MATERIALES */}
+          <div>
+            <label>⚠ Materiales o recambios que faltan</label>
+            <textarea className="input" placeholder="Ej: Falta válvula de expansión, filtro G4..." value={notas}
+              onChange={e => setNotas(e.target.value)} style={{ minHeight:70, resize:"vertical" }} />
+          </div>
+
+          {/* FOTOS */}
+          <div>
+            <label>📷 Fotos del trabajo</label>
+            {fotos.length > 0 && (
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10, marginTop:6 }}>
+                {fotos.map((url, i) => (
+                  <div key={i} style={{ position:"relative" }}>
+                    <img src={url} alt={`foto ${i+1}`} className="foto-thumb"
+                      onClick={() => setLightbox(i)}
+                      style={{ width:80, height:80, objectFit:"cover", borderRadius:8, border:`2px solid ${COLORS.border}` }} />
+                    <button onClick={() => setFotos(fotos.filter((_,j)=>j!==i))}
+                      style={{ position:"absolute", top:-6, right:-6, background:COLORS.danger, border:"none", borderRadius:"50%", width:20, height:20, cursor:"pointer", color:"#fff", fontSize:10, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+              <label htmlFor="foto-input" className="btn btn-ghost" style={{ cursor:"pointer", margin:0 }}>
+                {subiendo ? progreso : "📷 Añadir fotos"}
+              </label>
+              <input id="foto-input" type="file" accept="image/*" multiple style={{ display:"none" }}
+                onChange={e => subirFotos(Array.from(e.target.files))} disabled={subiendo} />
+              {fotos.length > 0 && <span style={{ fontSize:12, color:COLORS.muted }}>{fotos.length} foto{fotos.length!==1?"s":""} · toca para ampliar</span>}
+            </div>
+          </div>
+
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+            <button className="btn btn-primary" onClick={guardar} disabled={guardando||subiendo}
+              style={{ padding:"10px 24px", fontSize:14 }}>
+              {guardando ? "Guardando..." : "💾 Guardar"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+      {lightbox !== null && <Lightbox fotos={fotos} indice={lightbox} onClose={() => setLightbox(null)} />}
+    </>
+  );
+}
+
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const [fichando, setFichando] = useState(false);
@@ -279,8 +455,20 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const misFichajesHoy = fichajes
     .filter(f => f.trabajador === usuarioInfo.nombre && f.fecha === hoy)
     .sort((a, b) => (a.entrada||"").localeCompare(b.entrada||""));
+
   const misUltimos = fichajes.filter(f => f.trabajador === usuarioInfo.nombre).slice(0, 20);
-  const misEncargos = encargos.filter(e => e.asignado === usuarioInfo.nombre && e.estado !== "Cancelado");
+
+  // Encargos: el trabajador puede estar en asignados[] o en asignado (legacy)
+  // Ocultar Completados del día anterior
+  const misEncargos = encargos.filter(e => {
+    const asignados = Array.isArray(e.asignados) ? e.asignados : (e.asignado ? [e.asignado] : []);
+    if (!asignados.includes(usuarioInfo.nombre)) return false;
+    if (e.estado === "Cancelado") return false;
+    // Ocultar completados de días anteriores
+    if (e.estado === "Completado" && e.fechaCompletado && e.fechaCompletado < hoy) return false;
+    return true;
+  });
+
   const ultimoTramo = misFichajesHoy[misFichajesHoy.length - 1];
   const hayTramoAbierto = ultimoTramo != null && (!ultimoTramo.salida || ultimoTramo.salida === "");
   const totalHoyMins = misFichajesHoy.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
@@ -309,6 +497,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const porFecha = {};
   misUltimos.forEach(f => { if (!porFecha[f.fecha]) porFecha[f.fecha] = []; porFecha[f.fecha].push(f); });
 
+  const colorEstado = { "Pendiente": COLORS.yellow, "En curso": COLORS.accent, "Completado": COLORS.green };
+
   return (
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
       <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}`, padding:"16px 24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -318,69 +508,97 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => signOut(auth)}>Salir</button>
         </div>
       </div>
-      <div style={{ padding:24, maxWidth:860, margin:"0 auto" }}>
-        <div className="card" style={{ padding:28, marginBottom:24, borderTop:`3px solid ${COLORS.accent}` }}>
+
+      <div style={{ padding:20, maxWidth:860, margin:"0 auto" }}>
+        {/* FICHAR */}
+        <div className="card" style={{ padding:24, marginBottom:20, borderTop:`3px solid ${COLORS.accent}` }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
-            <div style={{ fontFamily:"Rajdhani", fontSize:22, fontWeight:700 }}>
+            <div style={{ fontFamily:"Rajdhani", fontSize:20, fontWeight:700 }}>
               {new Date().toLocaleDateString("es-ES", { weekday:"long", day:"numeric", month:"long" })}
             </div>
             {totalHoyMins > 0 && <div style={{ fontSize:13, color:COLORS.accent, marginTop:4 }}>⏱ Total hoy: {Math.floor(totalHoyMins/60)}h {totalHoyMins%60}m</div>}
           </div>
           {misFichajesHoy.length > 0 && (
-            <div style={{ marginBottom:20 }}>
+            <div style={{ marginBottom:16 }}>
               {misFichajesHoy.map((f, i) => (
-                <div key={f.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 16px", background:COLORS.surface, borderRadius:8, marginBottom:6 }}>
-                  <span style={{ fontSize:12, color:COLORS.muted, minWidth:60 }}>Tramo {i+1}</span>
+                <div key={f.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", background:COLORS.surface, borderRadius:8, marginBottom:6 }}>
+                  <span style={{ fontSize:12, color:COLORS.muted, minWidth:55 }}>Tramo {i+1}</span>
                   <span style={{ fontSize:13, color:COLORS.green }}>{f.entrada}</span>
                   <span style={{ color:COLORS.muted }}>→</span>
                   <span style={{ fontSize:13, color:f.salida ? COLORS.warm : COLORS.muted }}>{f.salida || "en curso..."}</span>
                   {f.salida ? <span style={{ fontSize:12, color:COLORS.accent, marginLeft:"auto" }}>{calcHoras(f.entrada, f.salida)}</span>
                     : <span className="badge" style={{ background:"rgba(0,196,255,.15)", color:COLORS.accent, marginLeft:"auto" }}>Activo</span>}
-                  {f.ubicacionEntrada && <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />}
+                  {f.ubicacionEntrada && <LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} />}
                 </div>
               ))}
             </div>
           )}
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
             {!hayTramoAbierto && (
-              <button className="btn btn-primary" style={{ padding:"12px 32px", fontSize:15 }} onClick={ficharEntrada} disabled={fichando}>
-                {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Entrada" : "🟢 Inicio tramo tarde"}
+              <button className="btn btn-primary" style={{ padding:"14px 40px", fontSize:16, borderRadius:12 }} onClick={ficharEntrada} disabled={fichando}>
+                {fichando ? "Registrando..." : misFichajesHoy.length === 0 ? "🟢 Registrar entrada" : "🟢 Inicio tramo tarde"}
               </button>
             )}
             {hayTramoAbierto && (
-              <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"12px 32px", fontSize:15 }} onClick={ficharSalida} disabled={fichando}>
-                {fichando ? "Registrando..." : "🔴 Salida"}
+              <button className="btn" style={{ background:COLORS.warm, color:"#fff", padding:"14px 40px", fontSize:16, borderRadius:12 }} onClick={ficharSalida} disabled={fichando}>
+                {fichando ? "Registrando..." : "🔴 Registrar salida"}
               </button>
             )}
-            {mensajeGPS && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{mensajeGPS}</div>}
-            {misFichajesHoy.length === 0 && !fichando && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>📍 Se registrará tu ubicación al fichar</div>}
+            {mensajeGPS && <div style={{ fontSize:12, color:COLORS.muted }}>{mensajeGPS}</div>}
+            {misFichajesHoy.length === 0 && !fichando && <div style={{ fontSize:12, color:COLORS.muted }}>📍 Se registrará tu ubicación al fichar</div>}
           </div>
         </div>
-        <div className="card" style={{ padding:20, marginBottom:24 }}>
-          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos</div>
-          {misEncargos.length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin encargos asignados</div>
-            : misEncargos.map(e => (
-              <div key={e.id} style={{ padding:"14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                    <EstadoBadge estado={e.prioridad} /><EstadoBadge estado={e.estado} />
-                  </div>
-                  <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>{e.titulo}</div>
-                  <div style={{ fontSize:12, color:COLORS.muted }}>
-                    {e.cliente}{e.localidad ? ` · ${e.localidad}` : ""}{e.fecha ? ` · ${e.fecha}` : ""}
-                  </div>
-                  {e.direccion && <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>📍 {e.direccion}</div>}
-                  {e.telefono && <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>📱 {e.telefono}</div>}
-                  {e.notasTrabajador && (
-                    <div style={{ fontSize:12, color:COLORS.yellow, marginTop:6, background:"rgba(255,214,0,.08)", padding:"6px 10px", borderRadius:6 }}>
-                      ⚠ Falta: {e.notasTrabajador}
+
+        {/* ENCARGOS */}
+        <div className="card" style={{ padding:20, marginBottom:20 }}>
+          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, marginBottom:16, color:COLORS.warm }}>🔧 Mis encargos ({misEncargos.length})</div>
+          {misEncargos.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:20 }}>Sin encargos asignados hoy</div>
+            : misEncargos.map(e => {
+              const estadoColor = colorEstado[e.estado] || COLORS.muted;
+              return (
+                <div key={e.id} style={{
+                  padding:"16px", marginBottom:10, borderRadius:12,
+                  background: e.estado==="Completado" ? "rgba(0,230,118,.06)" : COLORS.surface,
+                  border:`1px solid ${e.estado==="Completado" ? COLORS.green+"44" : COLORS.border}`,
+                }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+                        <EstadoBadge estado={e.prioridad} />
+                        <span className="badge" style={{ background:`${estadoColor}22`, color:estadoColor }}>{e.estado}</span>
+                      </div>
+                      <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>{e.titulo}</div>
+                      <div style={{ fontSize:12, color:COLORS.muted, marginBottom:4 }}>{e.cliente}</div>
+                      {(e.direccion || e.localidad) && <div style={{ marginBottom:4 }}><DireccionMaps direccion={e.direccion} localidad={e.localidad} /></div>}
+                      {e.telefono && <a href={`tel:${e.telefono}`} style={{ fontSize:12, color:COLORS.accent, textDecoration:"none", display:"block", marginBottom:4 }}>📱 {e.telefono}</a>}
+                      {e.notasTrabajador && (
+                        <div style={{ fontSize:12, color:COLORS.yellow, marginTop:6, background:"rgba(255,214,0,.08)", padding:"6px 10px", borderRadius:6 }}>
+                          ⚠ {e.notasTrabajador}
+                        </div>
+                      )}
+                      {e.fotos?.length > 0 && (
+                        <div style={{ fontSize:11, color:COLORS.green, marginTop:4 }}>📷 {e.fotos.length} foto{e.fotos.length!==1?"s":""} subida{e.fotos.length!==1?"s":""}</div>
+                      )}
                     </div>
-                  )}
+                    <button
+                      onClick={() => setEncargoSeleccionado(e)}
+                      style={{
+                        padding:"10px 16px", borderRadius:10, cursor:"pointer", border:"none",
+                        background: e.estado==="Completado" ? COLORS.green : COLORS.accent,
+                        color:"#000", fontSize:13, fontWeight:700, fontFamily:"Inter",
+                        whiteSpace:"nowrap", flexShrink:0,
+                      }}>
+                      {e.estado==="Completado" ? "✅ Ver" : "✏ Gestionar"}
+                    </button>
+                  </div>
                 </div>
-                <button className="btn btn-ghost" style={{ fontSize:12, whiteSpace:"nowrap" }} onClick={() => setEncargoSeleccionado(e)}>✏ Gestionar</button>
-              </div>
-            ))}
+              );
+            })
+          }
         </div>
+
+        {/* HISTORIAL */}
         <div className="card" style={{ padding:20 }}>
           <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Mis últimos días</div>
           {Object.keys(porFecha).length === 0 ? <div style={{ color:COLORS.muted, fontSize:13 }}>Sin registros</div>
@@ -402,91 +620,9 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             })}
         </div>
       </div>
+
       {encargoSeleccionado && <GestionarEncargo encargo={encargoSeleccionado} onClose={() => setEncargoSeleccionado(null)} />}
     </div>
-  );
-}
-
-// ─── GESTIONAR ENCARGO (trabajador) ──────────────────────────────────────────
-function GestionarEncargo({ encargo, onClose }) {
-  const [estado, setEstado] = useState(encargo.estado);
-  const [notas, setNotas] = useState(encargo.notasTrabajador || "");
-  const [fotos, setFotos] = useState(encargo.fotos || []);
-  const [subiendo, setSubiendo] = useState(false);
-  const [guardando, setGuardando] = useState(false);
-  const [progreso, setProgreso] = useState("");
-
-  const subirFotos = async (archivos) => {
-    setSubiendo(true);
-    const urls = [...fotos];
-    for (let i = 0; i < archivos.length; i++) {
-      setProgreso(`Subiendo foto ${i+1} de ${archivos.length}...`);
-      const url = await subirFoto(archivos[i]);
-      urls.push(url);
-    }
-    setFotos(urls); setSubiendo(false); setProgreso("");
-  };
-
-  const guardar = async () => {
-    setGuardando(true);
-    await updateDoc(doc(db, "encargos", encargo.id), { estado, notasTrabajador: notas, fotos });
-    setGuardando(false); onClose();
-  };
-
-  return (
-    <Modal title={`Gestionar: ${encargo.titulo}`} onClose={onClose} wide>
-      <div style={{ display:"grid", gap:16 }}>
-        <div style={{ background:COLORS.surface, padding:12, borderRadius:8 }}>
-          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:4 }}>
-            Cliente: {encargo.cliente}{encargo.localidad ? ` · ${encargo.localidad}` : ""}{encargo.fecha ? ` · ${encargo.fecha}` : ""}
-          </div>
-          {encargo.direccion && <div style={{ fontSize:12, color:COLORS.muted }}>📍 {encargo.direccion}</div>}
-          {encargo.telefono && <div style={{ fontSize:12, color:COLORS.muted }}>📱 {encargo.telefono}</div>}
-          {encargo.notas && <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginTop:4 }}>Nota admin: "{encargo.notas}"</div>}
-        </div>
-        <div>
-          <label>Estado del encargo</label>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            {["Pendiente","En curso","Completado"].map(s => (
-              <button key={s} className="btn" onClick={() => setEstado(s)}
-                style={{ background: estado===s ? (s==="Completado"?COLORS.green:s==="En curso"?COLORS.accent:COLORS.yellow) : COLORS.surface,
-                  color: estado===s ? "#000" : COLORS.muted,
-                  border:`1px solid ${estado===s?(s==="Completado"?COLORS.green:s==="En curso"?COLORS.accent:COLORS.yellow):COLORS.border}` }}>
-                {s==="Pendiente"?"⏳ Pendiente":s==="En curso"?"🔄 En curso":"✅ Completado"}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label>⚠ Materiales o recambios que faltan</label>
-          <textarea className="input" placeholder="Ej: Falta válvula de expansión, filtro G4..." value={notas} onChange={e => setNotas(e.target.value)} style={{ minHeight:80, resize:"vertical" }} />
-        </div>
-        <div>
-          <label>📷 Fotos del trabajo realizado</label>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
-            {fotos.map((url, i) => (
-              <div key={i} style={{ position:"relative" }}>
-                <img src={url} alt={`foto ${i+1}`} style={{ width:80, height:80, objectFit:"cover", borderRadius:8, border:`1px solid ${COLORS.border}` }} />
-                <button onClick={() => setFotos(fotos.filter((_,j)=>j!==i))}
-                  style={{ position:"absolute", top:-6, right:-6, background:COLORS.danger, border:"none", borderRadius:"50%", width:20, height:20, cursor:"pointer", color:"#fff", fontSize:10, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-              </div>
-            ))}
-          </div>
-          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-            <label htmlFor="foto-input" className="btn btn-ghost" style={{ cursor:"pointer", margin:0 }}>
-              📷 {subiendo ? progreso : "Añadir fotos"}
-            </label>
-            <input id="foto-input" type="file" accept="image/*" multiple style={{ display:"none" }}
-              onChange={e => subirFotos(Array.from(e.target.files))} disabled={subiendo} />
-            <span style={{ fontSize:12, color:COLORS.muted }}>{fotos.length} foto{fotos.length!==1?"s":""}</span>
-          </div>
-        </div>
-        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary" onClick={guardar} disabled={guardando||subiendo}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
-        </div>
-      </div>
-    </Modal>
   );
 }
 
@@ -767,7 +903,7 @@ function Fichajes({ trabajadores, fichajes }) {
   );
 }
 
-// ─── ENCARGOS con Firebase + Filtros avanzados ────────────────────────────────
+// ─── ENCARGOS (admin) ─────────────────────────────────────────────────────────
 function Encargos({ trabajadores }) {
   const [encargos, setEncargos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -778,8 +914,10 @@ function Encargos({ trabajadores }) {
   const [guardando, setGuardando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [resultadoImport, setResultadoImport] = useState(null);
+  const [lightboxAdmin, setLightboxAdmin] = useState(null);
+  const [vistaArchivados, setVistaArchivados] = useState(false);
 
-  // ─── FILTROS ─────────────────────────────────────────────────────────────────
+  // Filtros
   const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
@@ -788,7 +926,7 @@ function Encargos({ trabajadores }) {
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
 
   const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
-  const emptyForm = { titulo:"", cliente:"", asignado:"", prioridad:"Media", estado:"Pendiente", fecha:"", notas:"", localidad:"", direccion:"", telefono:"" };
+  const emptyForm = { titulo:"", cliente:"", asignados:[], prioridad:"Media", estado:"Pendiente", fecha:"", notas:"", localidad:"", direccion:"", telefono:"", archivado:false };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
@@ -796,39 +934,47 @@ function Encargos({ trabajadores }) {
     return onSnapshot(q, snap => { setEncargos(snap.docs.map(d=>({id:d.id,...d.data()}))); setCargando(false); });
   }, []);
 
-  const limpiarFiltros = () => {
-    setFiltroEstado("Todos");
-    setFiltroFechaDesde("");
-    setFiltroFechaHasta("");
-    setFiltroTrabajador("");
-    setFiltroLocalidad("");
-    setFiltroBusqueda("");
-  };
-
-  const hayFiltrosActivos = filtroEstado !== "Todos" || filtroFechaDesde || filtroFechaHasta || filtroTrabajador || filtroLocalidad || filtroBusqueda;
+  const limpiarFiltros = () => { setFiltroEstado("Todos"); setFiltroFechaDesde(""); setFiltroFechaHasta(""); setFiltroTrabajador(""); setFiltroLocalidad(""); setFiltroBusqueda(""); };
+  const hayFiltros = filtroEstado!=="Todos"||filtroFechaDesde||filtroFechaHasta||filtroTrabajador||filtroLocalidad||filtroBusqueda;
 
   const lista = encargos
-    .filter(e => filtroEstado === "Todos" || e.estado === filtroEstado)
-    .filter(e => !filtroFechaDesde || e.fecha >= filtroFechaDesde)
-    .filter(e => !filtroFechaHasta || e.fecha <= filtroFechaHasta)
-    .filter(e => !filtroTrabajador || e.asignado === filtroTrabajador)
+    .filter(e => vistaArchivados ? e.archivado : !e.archivado)
+    .filter(e => filtroEstado==="Todos" || e.estado===filtroEstado)
+    .filter(e => !filtroFechaDesde || e.fecha>=filtroFechaDesde)
+    .filter(e => !filtroFechaHasta || e.fecha<=filtroFechaHasta)
+    .filter(e => !filtroTrabajador || (Array.isArray(e.asignados)?e.asignados.includes(filtroTrabajador):e.asignado===filtroTrabajador))
     .filter(e => !filtroLocalidad || (e.localidad||"").toLowerCase().includes(filtroLocalidad.toLowerCase()))
     .filter(e => !filtroBusqueda || e.titulo?.toLowerCase().includes(filtroBusqueda.toLowerCase()) || e.cliente?.toLowerCase().includes(filtroBusqueda.toLowerCase()));
 
   const abrirNuevo = () => { setEditando(null); setForm(emptyForm); setModal(true); };
   const abrirEditar = (e) => {
     setEditando(e);
-    setForm({ titulo:e.titulo, cliente:e.cliente, asignado:e.asignado||"", prioridad:e.prioridad, estado:e.estado, fecha:e.fecha, notas:e.notas||"", localidad:e.localidad||"", direccion:e.direccion||"", telefono:e.telefono||"" });
+    const asignados = Array.isArray(e.asignados) ? e.asignados : (e.asignado ? [e.asignado] : []);
+    setForm({ titulo:e.titulo, cliente:e.cliente, asignados, prioridad:e.prioridad, estado:e.estado, fecha:e.fecha, notas:e.notas||"", localidad:e.localidad||"", direccion:e.direccion||"", telefono:e.telefono||"", archivado:e.archivado||false });
     setModal(true);
   };
   const guardar = async () => {
     if (!form.titulo) return; setGuardando(true);
-    if (editando) await updateDoc(doc(db,"encargos",editando.id), form);
-    else await addDoc(collection(db,"encargos"), form);
+    const datos = { ...form, asignado: form.asignados[0] || "" }; // compatibilidad legacy
+    if (editando) await updateDoc(doc(db,"encargos",editando.id), datos);
+    else await addDoc(collection(db,"encargos"), datos);
     setGuardando(false); setModal(false);
   };
   const eliminar = async (id) => { await deleteDoc(doc(db,"encargos",id)); setConfirmarEliminar(null); };
-  const cambiarEstado = async (id, estado) => { await updateDoc(doc(db,"encargos",id), { estado }); };
+  const cambiarEstado = async (id, estado) => {
+    const ahora = new Date().toISOString().split("T")[0];
+    await updateDoc(doc(db,"encargos",id), { estado, fechaCompletado: estado==="Completado" ? ahora : null });
+  };
+  const archivar = async (id, archivado) => { await updateDoc(doc(db,"encargos",id), { archivado }); };
+  const archivarTodosCompletados = async () => {
+    const completados = encargos.filter(e=>e.estado==="Completado"&&!e.archivado);
+    for (const e of completados) await updateDoc(doc(db,"encargos",e.id), { archivado:true });
+  };
+
+  const toggleAsignado = (nombre) => {
+    const actual = form.asignados || [];
+    setForm({ ...form, asignados: actual.includes(nombre) ? actual.filter(n=>n!==nombre) : [...actual, nombre] });
+  };
 
   const importarSmartsheet = async (archivo) => {
     setImportando(true); setResultadoImport(null);
@@ -839,53 +985,58 @@ function Encargos({ trabajadores }) {
       const filas = XLSX.utils.sheet_to_json(ws, { defval:"" });
       let importados = 0, saltados = 0;
       for (const fila of filas) {
-        const titulo = String(fila["ENCÀRREC / COMENTARI"] || fila["ENCARGO / COMENTARI"] || fila["ENCARGO"] || "").trim();
+        const titulo = String(fila["ENCÀRREC / COMENTARI"] || fila["ENCARGO"] || "").trim();
         const cliente = String(fila["CLIENT"] || fila["CLIENTE"] || "").trim();
-        const fecha = parsearFecha(fila["DATA"] || fila["FECHA"] || fila["DATA ENCARREC"] || "");
+        const fecha = parsearFecha(fila["DATA"] || fila["FECHA"] || "");
         const asignado = String(fila["ASSIGNAT"] || fila["ASIGNADO"] || "").trim();
-        const localidad = String(fila["Localitat"] || fila["LOCALITAT"] || fila["Localidad"] || "").trim();
-        const direccion = String(fila["DIRECCIÓ"] || fila["DIRECCION"] || fila["DIRECCIÓN"] || "").trim();
-        const telefono = String(fila["TELÈFON"] || fila["TELEFON"] || fila["TELÉFONO"] || "").trim();
-        const notas = String(fila["Comentarios"] || fila["COMENTARIS"] || "").trim();
+        const localidad = String(fila["Localitat"] || fila["Localidad"] || "").trim();
+        const direccion = String(fila["DIRECCIÓ"] || fila["DIRECCION"] || "").trim();
+        const telefono = String(fila["TELÈFON"] || fila["TELÉFONO"] || "").trim();
+        const notas = String(fila["Comentarios"] || "").trim();
         if (!titulo && !cliente) { saltados++; continue; }
-        await addDoc(collection(db,"encargos"), { titulo: titulo || `Encargo ${cliente}`, cliente, asignado, localidad, direccion, telefono, notas, fecha, prioridad: "Media", estado: "Pendiente" });
+        await addDoc(collection(db,"encargos"), {
+          titulo: titulo || `Encargo ${cliente}`, cliente, asignados: asignado ? [asignado] : [],
+          asignado, localidad, direccion, telefono, notas, fecha, prioridad:"Media", estado:"Pendiente", archivado:false
+        });
         importados++;
       }
       setResultadoImport({ importados, saltados });
-    } catch(e) {
-      setResultadoImport({ error: "No se pudo leer el archivo." });
-    }
+    } catch(e) { setResultadoImport({ error: "No se pudo leer el archivo." }); }
     setImportando(false);
   };
 
   return (
     <div>
       {/* CABECERA */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
         <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Encargos ☁</h2>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <label className="btn btn-ghost" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+          <button className="btn btn-ghost" style={{fontSize:12}} onClick={()=>setVistaArchivados(!vistaArchivados)}>
+            {vistaArchivados ? "📋 Ver activos" : "📦 Ver archivados"}
+          </button>
+          {!vistaArchivados && (
+            <button className="btn btn-ghost" style={{fontSize:12}} onClick={archivarTodosCompletados}>
+              ✅ Archivar completados
+            </button>
+          )}
+          <label className="btn btn-ghost" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontSize:12}}>
             {importando ? "⏳ Importando..." : "📊 Importar Smartsheet"}
-            <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
-              onChange={e => e.target.files[0] && importarSmartsheet(e.target.files[0])} disabled={importando} />
+            <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>e.target.files[0]&&importarSmartsheet(e.target.files[0])} disabled={importando} />
           </label>
           <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo encargo</button>
         </div>
       </div>
 
-      {/* RESULTADO IMPORTACIÓN */}
       {resultadoImport && (
-        <div style={{marginBottom:16,padding:14,borderRadius:10,background:resultadoImport.error?"rgba(255,71,87,.1)":"rgba(0,230,118,.1)",border:`1px solid ${resultadoImport.error?COLORS.danger:COLORS.green}`}}>
-          {resultadoImport.error
-            ? <span style={{color:COLORS.danger,fontSize:13}}>❌ {resultadoImport.error}</span>
-            : <span style={{color:COLORS.green,fontSize:13}}>✅ {resultadoImport.importados} encargos importados · {resultadoImport.saltados} filas vacías saltadas</span>
-          }
+        <div style={{marginBottom:12,padding:12,borderRadius:10,background:resultadoImport.error?"rgba(255,71,87,.1)":"rgba(0,230,118,.1)",border:`1px solid ${resultadoImport.error?COLORS.danger:COLORS.green}`}}>
+          {resultadoImport.error ? <span style={{color:COLORS.danger,fontSize:13}}>❌ {resultadoImport.error}</span>
+            : <span style={{color:COLORS.green,fontSize:13}}>✅ {resultadoImport.importados} importados · {resultadoImport.saltados} saltados</span>}
           <button className="btn btn-ghost" style={{fontSize:11,padding:"2px 8px",marginLeft:12}} onClick={()=>setResultadoImport(null)}>✕</button>
         </div>
       )}
 
-      {/* FILTROS POR ESTADO */}
-      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      {/* FILTROS ESTADO */}
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
         {["Todos",...ESTADOS_ENCARGO].map(f=>(
           <button key={f} className="btn" onClick={()=>setFiltroEstado(f)}
             style={{background:filtroEstado===f?COLORS.accent:COLORS.surface,color:filtroEstado===f?"#000":COLORS.muted,border:`1px solid ${filtroEstado===f?COLORS.accent:COLORS.border}`,fontSize:12}}>
@@ -895,74 +1046,67 @@ function Encargos({ trabajadores }) {
       </div>
 
       {/* FILTROS AVANZADOS */}
-      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center",padding:"12px 16px",background:COLORS.surface,borderRadius:10,border:`1px solid ${COLORS.border}`}}>
-        <input className="input" type="date" style={{width:"auto",fontSize:12}} title="Desde fecha"
-          value={filtroFechaDesde} onChange={e=>setFiltroFechaDesde(e.target.value)} />
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center",padding:"10px 14px",background:COLORS.surface,borderRadius:10,border:`1px solid ${COLORS.border}`}}>
+        <input className="input" type="date" style={{width:"auto",fontSize:12}} value={filtroFechaDesde} onChange={e=>setFiltroFechaDesde(e.target.value)} />
         <span style={{color:COLORS.muted,fontSize:12}}>→</span>
-        <input className="input" type="date" style={{width:"auto",fontSize:12}} title="Hasta fecha"
-          value={filtroFechaHasta} onChange={e=>setFiltroFechaHasta(e.target.value)} />
-        <input className="input" placeholder="📍 Localidad..." style={{width:140,fontSize:12}}
-          value={filtroLocalidad} onChange={e=>setFiltroLocalidad(e.target.value)} />
+        <input className="input" type="date" style={{width:"auto",fontSize:12}} value={filtroFechaHasta} onChange={e=>setFiltroFechaHasta(e.target.value)} />
+        <input className="input" placeholder="📍 Localidad..." style={{width:130,fontSize:12}} value={filtroLocalidad} onChange={e=>setFiltroLocalidad(e.target.value)} />
         <select className="select" style={{fontSize:12,padding:"9px 10px"}} value={filtroTrabajador} onChange={e=>setFiltroTrabajador(e.target.value)}>
-          <option value="">👷 Todos los trabajadores</option>
+          <option value="">👷 Todos</option>
           {nombresActivos.map(t=><option key={t}>{t}</option>)}
         </select>
-        <input className="input" placeholder="🔍 Buscar título o cliente..." style={{flex:1,minWidth:160,fontSize:12}}
-          value={filtroBusqueda} onChange={e=>setFiltroBusqueda(e.target.value)} />
-        {hayFiltrosActivos && (
-          <button className="btn btn-ghost" style={{fontSize:12,whiteSpace:"nowrap"}} onClick={limpiarFiltros}>✕ Limpiar</button>
-        )}
-        <span style={{marginLeft:"auto",fontFamily:"Rajdhani",fontWeight:700,fontSize:14,color:COLORS.accent,whiteSpace:"nowrap"}}>
-          {lista.length} encargo{lista.length!==1?"s":""}
-        </span>
+        <input className="input" placeholder="🔍 Buscar..." style={{flex:1,minWidth:140,fontSize:12}} value={filtroBusqueda} onChange={e=>setFiltroBusqueda(e.target.value)} />
+        {hayFiltros && <button className="btn btn-ghost" style={{fontSize:12}} onClick={limpiarFiltros}>✕</button>}
+        <span style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:14,color:COLORS.accent,whiteSpace:"nowrap"}}>{lista.length} enc.</span>
       </div>
 
       {/* LISTA */}
       {cargando ? <div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Cargando...</div> : (
-        <div style={{display:"grid",gap:12}}>
+        <div style={{display:"grid",gap:10}}>
           {lista.length===0
-            ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>
-                {hayFiltrosActivos ? "No hay encargos con estos filtros" : "No hay encargos"}
-              </div>
-            : lista.map(e=>(
-              <div key={e.id} className="card" style={{padding:18}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-                      <EstadoBadge estado={e.prioridad}/><EstadoBadge estado={e.estado}/>
-                      {e.notasTrabajador && <span className="badge" style={{background:"rgba(255,214,0,.15)",color:COLORS.yellow}}>⚠ Falta material</span>}
-                      {e.fotos?.length > 0 && <span className="badge" style={{background:"rgba(0,230,118,.15)",color:COLORS.green}}>📷 {e.fotos.length}</span>}
-                    </div>
-                    <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
-                    <div style={{fontSize:12,color:COLORS.muted}}>
-                      {e.cliente}{e.localidad?` · 📍 ${e.localidad}`:""}{e.asignado?` · 👷 ${e.asignado}`:" · Sin asignar"}{e.fecha?` · ${e.fecha}`:""}
-                    </div>
-                    {e.direccion && <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>🏠 {e.direccion}</div>}
-                    {e.telefono && <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>📱 {e.telefono}</div>}
-                    {e.notasTrabajador && (
-                      <div style={{fontSize:12,color:COLORS.yellow,marginTop:6,background:"rgba(255,214,0,.08)",padding:"6px 10px",borderRadius:6}}>
-                        ⚠ {e.notasTrabajador}
+            ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>{vistaArchivados?"No hay encargos archivados":hayFiltros?"Sin resultados con estos filtros":"No hay encargos"}</div>
+            : lista.map(e=>{
+              const asignados = Array.isArray(e.asignados) ? e.asignados : (e.asignado ? [e.asignado] : []);
+              return (
+                <div key={e.id} className="card" style={{padding:16, opacity: e.archivado?0.7:1 }}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                        <EstadoBadge estado={e.prioridad}/><EstadoBadge estado={e.estado}/>
+                        {e.notasTrabajador && <span className="badge" style={{background:"rgba(255,214,0,.15)",color:COLORS.yellow}}>⚠ Falta material</span>}
+                        {e.fotos?.length > 0 && <span className="badge" style={{background:"rgba(0,230,118,.15)",color:COLORS.green}}>📷 {e.fotos.length}</span>}
+                        {e.archivado && <span className="badge" style={{background:"rgba(139,143,168,.15)",color:COLORS.muted}}>📦 Archivado</span>}
                       </div>
-                    )}
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-                    <select className="select" style={{fontSize:12,padding:"5px 8px"}} value={e.estado} onChange={ev=>cambiarEstado(e.id,ev.target.value)}>
-                      {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
-                    </select>
-                    <div style={{display:"flex",gap:6}}>
-                      {(e.fotos?.length > 0 || e.notasTrabajador) && (
-                        <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>setVerDetalle(e)}>🔍</button>
-                      )}
-                      <button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(e)}>✏</button>
-                      <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>
+                      <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{e.titulo}</div>
+                      <div style={{fontSize:12,color:COLORS.muted,marginBottom:2}}>
+                        {e.cliente}{asignados.length>0?` · 👷 ${asignados.join(", ")}`:""}{e.fecha?` · ${e.fecha}`:""}
+                      </div>
+                      {(e.direccion || e.localidad) && <div style={{marginBottom:2}}><DireccionMaps direccion={e.direccion} localidad={e.localidad} /></div>}
+                      {e.telefono && <div style={{fontSize:12,color:COLORS.muted}}>📱 {e.telefono}</div>}
+                      {e.notasTrabajador && <div style={{fontSize:12,color:COLORS.yellow,marginTop:6,background:"rgba(255,214,0,.08)",padding:"5px 10px",borderRadius:6}}>⚠ {e.notasTrabajador}</div>}
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
+                      <select className="select" style={{fontSize:12,padding:"4px 7px"}} value={e.estado} onChange={ev=>cambiarEstado(e.id,ev.target.value)}>
+                        {ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}
+                      </select>
+                      <div style={{display:"flex",gap:5}}>
+                        {(e.fotos?.length>0||e.notasTrabajador) && <button className="btn btn-ghost" style={{fontSize:11,padding:"3px 7px"}} onClick={()=>setVerDetalle(e)}>🔍</button>}
+                        <button className="btn btn-ghost" style={{fontSize:11,padding:"3px 7px"}} onClick={()=>abrirEditar(e)}>✏</button>
+                        <button className="btn btn-ghost" style={{fontSize:11,padding:"3px 7px"}} onClick={()=>archivar(e.id,!e.archivado)} title={e.archivado?"Restaurar":"Archivar"}>
+                          {e.archivado?"📤":"📦"}
+                        </button>
+                        <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })
+          }
         </div>
       )}
 
+      {/* MODAL VER DETALLE */}
       {verDetalle && (
         <Modal title={`Detalle: ${verDetalle.titulo}`} onClose={()=>setVerDetalle(null)} wide>
           <div style={{display:"grid",gap:16}}>
@@ -974,12 +1118,12 @@ function Encargos({ trabajadores }) {
             )}
             {verDetalle.fotos?.length > 0 && (
               <div>
-                <label>📷 Fotos ({verDetalle.fotos.length})</label>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10,marginTop:8}}>
+                <label>📷 Fotos ({verDetalle.fotos.length}) — toca para ampliar</label>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,marginTop:8}}>
                   {verDetalle.fotos.map((url,i)=>(
-                    <a key={i} href={url} target="_blank" rel="noreferrer">
-                      <img src={url} alt={`foto ${i+1}`} style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8,border:`1px solid ${COLORS.border}`}} />
-                    </a>
+                    <img key={i} src={url} alt={`foto ${i+1}`} className="foto-thumb"
+                      onClick={()=>setLightboxAdmin(i)}
+                      style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8,border:`2px solid ${COLORS.border}`}} />
                   ))}
                 </div>
               </div>
@@ -988,8 +1132,10 @@ function Encargos({ trabajadores }) {
           </div>
         </Modal>
       )}
+      {lightboxAdmin !== null && verDetalle && <Lightbox fotos={verDetalle.fotos} indice={lightboxAdmin} onClose={()=>setLightboxAdmin(null)} />}
 
-      {modal&&<Modal title={editando?"Editar Encargo":"Nuevo Encargo"} onClose={()=>setModal(false)}>
+      {/* MODAL EDITAR/CREAR */}
+      {modal && <Modal title={editando?"Editar Encargo":"Nuevo Encargo"} onClose={()=>setModal(false)} wide>
         <div style={{display:"grid",gap:14}}>
           <div><label>Título *</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -1001,8 +1147,30 @@ function Encargos({ trabajadores }) {
             <div><label>Teléfono</label><input className="input" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
           </div>
           <div><label>Dirección</label><input className="input" value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} /></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-            <div><label>Asignado</label><select className="select" style={{width:"100%"}} value={form.asignado} onChange={e=>setForm({...form,asignado:e.target.value})}><option value="">Sin asignar</option>{nombresActivos.map(t=><option key={t}>{t}</option>)}</select></div>
+
+          {/* MÚLTIPLES TRABAJADORES */}
+          <div>
+            <label>👷 Trabajadores asignados</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:6}}>
+              {nombresActivos.map(nombre => {
+                const sel = (form.asignados||[]).includes(nombre);
+                return (
+                  <button key={nombre} type="button" onClick={()=>toggleAsignado(nombre)}
+                    style={{ padding:"6px 14px", borderRadius:20, cursor:"pointer", border:"none", fontFamily:"Inter", fontSize:12, fontWeight:500,
+                      background: sel ? COLORS.accent : COLORS.surface,
+                      color: sel ? "#000" : COLORS.muted,
+                      outline: sel ? `2px solid ${COLORS.accent}` : `1px solid ${COLORS.border}` }}>
+                    {sel ? "✓ " : ""}{nombre}
+                  </button>
+                );
+              })}
+            </div>
+            {(form.asignados||[]).length > 0 && (
+              <div style={{fontSize:11,color:COLORS.muted,marginTop:6}}>Asignado a: {form.asignados.join(", ")}</div>
+            )}
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Prioridad</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}</select></div>
             <div><label>Estado</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
@@ -1013,6 +1181,7 @@ function Encargos({ trabajadores }) {
           </div>
         </div>
       </Modal>}
+
       {confirmarEliminar&&<Modal title="¿Eliminar encargo?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
@@ -1172,7 +1341,7 @@ function Manuales({ onManualesChange }) {
         </div>
       )}
       {confirmarEliminar&&<Modal title="¿Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
-        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div><div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>No se puede deshacer.</div></div>
+        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancelar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
       {modal&&<Modal title="Añadir Manual" onClose={()=>setModal(false)}>
@@ -1192,11 +1361,11 @@ function Manuales({ onManualesChange }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
+function Dashboard({ encargos, fichajes, trabajadores, albaranes }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
-  const encargosActivos=encargos.filter(e=>e.estado==="En curso"||e.estado==="Pendiente").length;
-  const materialFaltante=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado").length;
+  const encargosActivos=encargos.filter(e=>!e.archivado&&(e.estado==="En curso"||e.estado==="Pendiente")).length;
+  const materialFaltante=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado"&&!e.archivado).length;
   const totalFacturado=albaranes.filter(a=>a.estado==="Cobrado").reduce((s,a)=>s+a.importe,0);
   const stats=[
     {label:"Trabajadores activos",value:trabajadores.filter(t=>t.estado!=="Inactivo").length,color:COLORS.accent,icon:"👷"},
@@ -1204,8 +1373,8 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
     {label:"Encargos activos",value:encargosActivos,color:COLORS.warm,icon:"🔧"},
     {label:"⚠ Falta material",value:materialFaltante,color:COLORS.yellow,icon:"📦"},
   ];
-  const urgentes=encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado");
-  const conMaterial=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado");
+  const urgentes=encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado"&&!e.archivado);
+  const conMaterial=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado"&&!e.archivado);
   const fichajesHoyList=fichajes.filter(f=>f.fecha===hoy).slice(0,6);
 
   return (
@@ -1236,7 +1405,9 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
           {urgentes.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sin encargos urgentes</div>:urgentes.map(e=>(
             <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
               <div style={{fontSize:13,fontWeight:500}}>{e.titulo}</div>
-              <div style={{fontSize:12,color:COLORS.muted,marginTop:3}}>{e.asignado||"Sin asignar"} · {e.localidad||e.fecha}</div>
+              <div style={{fontSize:12,color:COLORS.muted,marginTop:3}}>
+                {(Array.isArray(e.asignados)?e.asignados.join(", "):e.asignado)||"Sin asignar"} · {e.localidad||e.fecha}
+              </div>
             </div>
           ))}
         </div>
@@ -1246,7 +1417,7 @@ function Dashboard({ encargos, manuales, fichajes, trabajadores, albaranes }) {
           <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.yellow}}>📦 Material pendiente</div>
           {conMaterial.map(e=>(
             <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
-              <div style={{fontSize:13,fontWeight:500}}>{e.titulo} <span style={{fontSize:12,color:COLORS.muted}}>— {e.asignado}</span></div>
+              <div style={{fontSize:13,fontWeight:500}}>{e.titulo} <span style={{fontSize:12,color:COLORS.muted}}>— {Array.isArray(e.asignados)?e.asignados.join(", "):e.asignado}</span></div>
               <div style={{fontSize:12,color:COLORS.yellow,marginTop:3}}>⚠ {e.notasTrabajador}</div>
             </div>
           ))}
