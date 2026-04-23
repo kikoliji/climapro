@@ -613,7 +613,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     else await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: new Date().toISOString() });
 
     // Guardar materials nous a l'historial
-    for (const mat of form.materials) {
+    for (const mat of (form.materials||[])) {
       if (mat.descripcio && !materialsHistorial.includes(mat.descripcio)) {
         await addDoc(collection(db,"materialsHistorial"), { nom: mat.descripcio, createdAt: new Date().toISOString() });
       }
