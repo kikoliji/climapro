@@ -551,7 +551,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     signatura: null, estat: "Pendent", encargoId: "",
   };
 
-  const [form, setForm] = useState(hoja ? { ...emptyForm, ...hoja } : emptyForm);
+  const [form, setForm] = useState(hoja ? { ...emptyForm, ...hoja, materials: hoja.materials || [], operaris: hoja.operaris || [] } : emptyForm);
   const [guardando, setGuardando] = useState(false);
   const [mostrarSignatura, setMostrarSignatura] = useState(false);
   const [generant, setGenerant] = useState(false);
@@ -571,11 +571,11 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
 
   const afegirMaterial = (desc, preu) => {
     if (!desc.trim()) return;
-    setForm(f => ({ ...f, materials: [...f.materials, { descripcio: desc.trim(), preu: preu.trim() }] }));
+    setForm(f => ({ ...f, materials: [...(f.materials||[]), { descripcio: desc.trim(), preu: preu.trim() }] }));
     setMatInput(""); setMatPreu(""); setSugMaterials([]); setShowSug(false);
   };
 
-  const eliminarMaterial = (i) => setForm(f => ({ ...f, materials: f.materials.filter((_,j)=>j!==i) }));
+  const eliminarMaterial = (i) => setForm(f => ({ ...f, materials: (f.materials||[]).filter((_,j)=>j!==i) }));
 
   const toggleOperari = (nom) => {
     const actual = form.operaris || [];
@@ -721,9 +721,9 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
       {/* MATERIALS */}
       <div>
         <label>🔩 Materials subministrats o instal·lats</label>
-        {form.materials.length > 0 && (
+        {(form.materials||[]).length > 0 && (
           <div style={{ marginBottom:8 }}>
-            {form.materials.map((m,i) => (
+            {(form.materials||[]).map((m,i) => (
               <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:COLORS.surface, borderRadius:6, marginBottom:4 }}>
                 <span style={{ fontSize:13, flex:1 }}>{m.descripcio}</span>
                 <span style={{ fontSize:13, color:COLORS.green, marginRight:10 }}>{m.preu ? `${m.preu}€` : ""}</span>
