@@ -223,13 +223,13 @@ async function generarPDFHojaTreball(hoja) {
 
   // Valors client
   pdf.setFontSize(9); pdf.setFont("helvetica","normal"); pdf.setTextColor(20,20,20);
-  pdf.text(hoja.client || "", cx+15, cy+12);
-  pdf.text(hoja.domicili || "", cx+15, cy+21);
+  pdf.text(hoja.client || "", cx+15, cy+8);
+  pdf.text(hoja.domicili || "", cx+15, cy+17);
   const telPob = [hoja.telefon, hoja.poblacio].filter(Boolean).join("  /  ");
-  pdf.text(telPob, cx+15, cy+30);
+  pdf.text(telPob, cx+15, cy+26);
   const numNif = [hoja.numero ? `Núm. ${hoja.numero}` : "", hoja.nif ? `NIF: ${hoja.nif}` : ""].filter(Boolean).join("    ");
-  pdf.text(numNif, cx+15, cy+39);
-  pdf.text((hoja.operaris||[]).join(", "), cx+15, cy+48);
+  pdf.text(numNif, cx+15, cy+35);
+  pdf.text((hoja.operaris||[]).join(", "), cx+15, cy+44);
 
   // Data
   pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.3);
