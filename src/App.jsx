@@ -1601,19 +1601,21 @@ function Encargos({ trabajadores }) {
             <div><label>Estat</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
           <div>
-            <label>Assignat</label>
-            <select
-              className="select"
-              style={{width:"100%"}}
-              value={form.asignados?.[0] || ""}
-              onChange={e => setForm({...form, asignados: e.target.value ? [e.target.value] : []})}
-            >
-              <option value="">Sense assignar</option>
-              {trabajadores
-                .filter(t => t.estado !== "Inactivo")
-                .map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)
-              }
-            </select>
+            <label>👷 Assignat</label>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:6}}>
+              {nombresActivos.map(nom=>{
+                const sel=(form.asignados||[]).includes(nom);
+                return(
+                  <button key={nom} type="button" onClick={()=>toggleAsignado(nom)}
+                    style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",border:"none",fontFamily:"Inter",fontSize:12,fontWeight:500,
+                      background:sel?COLORS.accent:COLORS.surface,
+                      color:sel?"#000":COLORS.muted,
+                      outline:sel?`2px solid ${COLORS.accent}`:`1px solid ${COLORS.border}`}}>
+                    {sel?"✓ ":""}{nom}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div><label>Notes per al treballador</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
