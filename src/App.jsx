@@ -223,13 +223,13 @@ async function generarPDFHojaTreball(hoja) {
 
   // Valors client
   pdf.setFontSize(9); pdf.setFont("helvetica","normal"); pdf.setTextColor(20,20,20);
-  pdf.text(hoja.client || "", cx+3, cy+16);
-  pdf.text(hoja.domicili || "", cx+3, cy+25);
+  pdf.text(hoja.client || "", cx+11, cy+14);
+  pdf.text(hoja.domicili || "", cx+11, cy+23);
   const telPob = [hoja.telefon, hoja.poblacio].filter(Boolean).join("  /  ");
-  pdf.text(telPob, cx+3, cy+34);
+  pdf.text(telPob, cx+11, cy+32);
   const numNif = [hoja.numero ? `Núm. ${hoja.numero}` : "", hoja.nif ? `NIF: ${hoja.nif}` : ""].filter(Boolean).join("    ");
-  pdf.text(numNif, cx+3, cy+43);
-  pdf.text((hoja.operaris||[]).join(", "), cx+3, cy+52);
+  pdf.text(numNif, cx+11, cy+41);
+  pdf.text((hoja.operaris||[]).join(", "), cx+11, cy+50);
 
   // Data
   pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.3);
@@ -479,7 +479,10 @@ function CanvasSignatura({ onSave, onCancel }) {
   const getPos = (e, canvas) => {
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches ? e.touches[0] : e;
-    return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    return {
+      x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+      y: (touch.clientY - rect.top) * (canvas.height / rect.height)
+    };
   };
 
   const start = (e) => {
@@ -1454,7 +1457,7 @@ function Encargos({ trabajadores }) {
     .filter(e=>!filtroBusqueda||e.titulo?.toLowerCase().includes(filtroBusqueda.toLowerCase())||e.cliente?.toLowerCase().includes(filtroBusqueda.toLowerCase()));
 
   const abrirNuevo=()=>{setEditando(null);setForm(emptyForm);setModal(true);};
-  const abrirEditar=(e)=>{ setEditando(e); const asignados=Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]); setForm({titulo:e.titulo,cliente:e.cliente,asignados,prioridad:e.prioridad,estado:e.estado,fecha:e.fecha,notas:e.notas||"",localidad:e.localidad||"",direccion:e.direccion||"",telefono:e.telefono||"",archivado:e.archivado||false}); setModal(true); };
+  const abrirEditar=(e)=>{ setEditando(e); const asignados=Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]); const toStr=(v)=>(v&&typeof v==="object"&&v.toDate)?v.toDate().toISOString().split("T")[0]:(typeof v==="string"?v:""); setForm({titulo:e.titulo||"",cliente:e.cliente||"",asignados,prioridad:e.prioridad||"Media",estado:e.estado||"Pendiente",fecha:toStr(e.fecha),notas:e.notas||"",localidad:e.localidad||"",direccion:e.direccion||"",telefono:e.telefono||"",archivado:e.archivado||false}); setModal(true); };
   const guardar=async()=>{ if(!form.titulo)return;setGuardando(true); const datos={...form,asignado:form.asignados[0]||""}; if(editando)await updateDoc(doc(db,"encargos",editando.id),datos); else await addDoc(collection(db,"encargos"),datos); setGuardando(false);setModal(false); };
   const eliminar=async(id)=>{await deleteDoc(doc(db,"encargos",id));setConfirmarEliminar(null);};
   const cambiarEstado=async(id,estado)=>{ const ahora=new Date().toISOString().split("T")[0]; await updateDoc(doc(db,"encargos",id),{estado,fechaCompletado:estado==="Completado"?ahora:null}); };
