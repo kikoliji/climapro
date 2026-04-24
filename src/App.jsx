@@ -275,15 +275,12 @@ async function generarPDFHojaTreball(hoja) {
   yPos += 7;
 
   const matW = W-2*M;
-  const matColDesc = matW*0.75, matColPreu = matW*0.25;
   // Capçalera materials
   pdf.setFillColor(250,250,250); pdf.rect(M, yPos, matW, 6, "F");
   pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.2);
   pdf.rect(M, yPos, matW, 6);
-  pdf.line(M+matColDesc, yPos, M+matColDesc, yPos+6);
   pdf.setFontSize(7); pdf.setFont("helvetica","italic"); pdf.setTextColor(80,80,80);
   pdf.text("Descripció material", M+2, yPos+4);
-  pdf.text("Preu €", M+matColDesc+2, yPos+4);
   yPos += 6;
 
   const mats = hoja.materials || [];
@@ -292,58 +289,25 @@ async function generarPDFHojaTreball(hoja) {
   for (let i = 0; i < maxMats; i++) {
     pdf.setDrawColor(180,180,180); pdf.setLineWidth(0.15);
     pdf.rect(M, yPos, matW, matLineH);
-    pdf.line(M+matColDesc, yPos, M+matColDesc, yPos+matLineH);
     if (mats[i]) {
       pdf.setFontSize(8); pdf.setFont("helvetica","normal"); pdf.setTextColor(20,20,20);
-      pdf.text(String(mats[i].descripcio||"").substring(0,60), M+2, yPos+5);
-      if (mats[i].preu) pdf.text(String(mats[i].preu), M+matColDesc+2, yPos+5);
+      pdf.text(String(mats[i].descripcio||"").substring(0,90), M+2, yPos+5);
     }
     yPos += matLineH;
   }
   yPos += 3;
 
-  // Totals i signatura
-  const sigW = (W-2*M)*0.55, totW = (W-2*M)*0.45;
-  const totX = M+sigW+3;
-  const rowH = 8;
-  const totals = [
-    { lbl:"Materials", val: hoja.totalMaterials||"" },
-    { lbl:"Treballs", val: hoja.totalTreballs||"" },
-    { lbl:"Desplaçaments/Dietes", val: hoja.totalDesplacaments||"" },
-    { lbl:"Suma", val: hoja.suma||"" },
-    { lbl:`IVA ${hoja.iva||21}%`, val: hoja.totalIva||"" },
-    { lbl:"TOTAL", val: hoja.total||"", bold:true },
-  ];
-
-  // Caixa signatura
+  // Signatura (ample complet)
+  const sigH = 52;
   pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.3);
-  pdf.rect(M, yPos, sigW, totals.length*rowH+4);
+  pdf.rect(M, yPos, W-2*M, sigH);
   pdf.setFontSize(8); pdf.setFont("helvetica","italic"); pdf.setTextColor(100,100,100);
   pdf.text("Signatura Client,", M+3, yPos+6);
-
-  // Signatura dibuixada
   if (hoja.signatura) {
     try {
-      pdf.addImage(hoja.signatura, "PNG", M+3, yPos+10, sigW-6, totals.length*rowH-12);
+      pdf.addImage(hoja.signatura, "PNG", M+3, yPos+10, W-2*M-6, sigH-14);
     } catch(e) {}
   }
-
-  // Caixa totals
-  totals.forEach((t, i) => {
-    const ty = yPos + i*rowH;
-    pdf.setDrawColor(150,150,150); pdf.setLineWidth(0.2);
-    pdf.rect(totX, ty, totW, rowH);
-    pdf.line(totX+totW*0.6, ty, totX+totW*0.6, ty+rowH);
-    if (t.bold) {
-      pdf.setFillColor(230,230,230); pdf.rect(totX, ty, totW, rowH, "F");
-      pdf.setFont("helvetica","bold");
-    } else {
-      pdf.setFont("helvetica","normal");
-    }
-    pdf.setFontSize(8); pdf.setTextColor(30,30,30);
-    pdf.text(t.lbl, totX+2, ty+5.5);
-    if (t.val) pdf.text(String(t.val), totX+totW*0.62, ty+5.5);
-  });
 
   return pdf;
 }
@@ -549,9 +513,8 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     numero: "", data: new Date().toISOString().split("T")[0],
     client: "", domicili: "", poblacio: "", telefon: "", nif: "",
     operaris: [], horesOperari: "", horesAjudant: "", desplacaments: "", dietes: "", altres: "",
-    descripcio: "", materials: [], iva: 21,
-    totalMaterials: "", totalTreballs: "", totalDesplacaments: "", suma: "", totalIva: "", total: "",
-    signatura: null, estat: "Pendent", encargoId: "",
+    descripcio: "", materials: [],
+    signatura: null, estat: "Pendent", encargoId: "", email: "",
   };
 
   const [form, setForm] = useState(hoja ? { ...emptyForm, ...hoja, materials: hoja.materials || [], operaris: hoja.operaris || [] } : emptyForm);
@@ -560,7 +523,6 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const [generant, setGenerant] = useState(false);
   const [sugMaterials, setSugMaterials] = useState([]);
   const [matInput, setMatInput] = useState("");
-  const [matPreu, setMatPreu] = useState("");
   const [showSug, setShowSug] = useState(false);
 
   const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
@@ -572,10 +534,10 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     setSugMaterials(sug);
   };
 
-  const afegirMaterial = (desc, preu) => {
+  const afegirMaterial = (desc) => {
     if (!desc.trim()) return;
-    setForm(f => ({ ...f, materials: [...(f.materials||[]), { descripcio: desc.trim(), preu: preu.trim() }] }));
-    setMatInput(""); setMatPreu(""); setSugMaterials([]); setShowSug(false);
+    setForm(f => ({ ...f, materials: [...(f.materials||[]), { descripcio: desc.trim() }] }));
+    setMatInput(""); setSugMaterials([]); setShowSug(false);
   };
 
   const eliminarMaterial = (i) => setForm(f => ({ ...f, materials: (f.materials||[]).filter((_,j)=>j!==i) }));
@@ -583,30 +545,6 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const toggleOperari = (nom) => {
     const actual = form.operaris || [];
     setForm({ ...form, operaris: actual.includes(nom) ? actual.filter(n=>n!==nom) : [...actual, nom] });
-  };
-
-  // Càlcul automàtic totals
-  const recalcular = (f) => {
-    const mats = (f.materials||[]).reduce((s,m) => s + (parseFloat(m.preu)||0), 0);
-    const treb = parseFloat(f.totalTreballs)||0;
-    const desp = parseFloat(f.totalDesplacaments)||0;
-    const suma = mats + treb + desp;
-    const iva = suma * (parseFloat(f.iva)||21) / 100;
-    const total = suma + iva;
-    return {
-      ...f,
-      totalMaterials: mats > 0 ? mats.toFixed(2) : f.totalMaterials,
-      suma: suma > 0 ? suma.toFixed(2) : "",
-      totalIva: suma > 0 ? iva.toFixed(2) : "",
-      total: suma > 0 ? total.toFixed(2) : "",
-    };
-  };
-
-  const setFormCalc = (updater) => {
-    setForm(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      return recalcular(next);
-    });
   };
 
   const guardar = async () => {
@@ -632,13 +570,24 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     setGenerant(false);
   };
 
+  const enviarPerCorreu = async () => {
+    if (!form.email) { alert("Afegeix l'email del client al formulari"); return; }
+    setGenerant(true);
+    const pdf = await generarPDFHojaTreball(form);
+    pdf.save(`full_treball_${form.numero||"nou"}_${form.client||"client"}.pdf`);
+    const subject = encodeURIComponent(`Full de treball${form.numero ? ` #${form.numero}` : ""} - Nouaire`);
+    const body = encodeURIComponent(`Bona dia,\n\nAdjuntem el full de treball${form.numero ? ` #${form.numero}` : ""}${form.data ? ` del dia ${form.data}` : ""}.\n\nSi teniu qualsevol dubte, no dubteu en contactar-nos.\n\nNouaire\nTel. ${EMPRESA.telefon}\n${EMPRESA.email}`);
+    window.open(`mailto:${form.email}?subject=${subject}&body=${body}`);
+    setGenerant(false);
+  };
+
   // Omplir des d'encàrrec
   const omplirDesEncargo = (encargoId) => {
     const enc = encargos.find(e=>e.id===encargoId);
     if (!enc) return;
     const asignados = Array.isArray(enc.asignados) ? enc.asignados : (enc.asignado ? [enc.asignado] : []);
     const toStr = (v) => (v && typeof v === "object" && v.toDate) ? v.toDate().toISOString().split("T")[0] : (typeof v === "string" ? v : "");
-    setFormCalc(f => ({
+    setForm(f => ({
       ...f, encargoId,
       client: toStr(enc.cliente) || f.client,
       domicili: toStr(enc.direccion) || f.domicili,
@@ -682,6 +631,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
         <div><label>Població</label><input className="input" value={form.poblacio} onChange={e=>setForm({...form,poblacio:e.target.value})} /></div>
         <div><label>Telèfon</label><input className="input" value={form.telefon} onChange={e=>setForm({...form,telefon:e.target.value})} /></div>
       </div>
+      <div><label>📧 Email client</label><input className="input" type="email" placeholder="client@exemple.com" value={form.email||""} onChange={e=>setForm({...form,email:e.target.value})} /></div>
 
       {/* OPERARIS */}
       <div>
@@ -730,7 +680,6 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
             {(form.materials||[]).map((m,i) => (
               <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:COLORS.surface, borderRadius:6, marginBottom:4 }}>
                 <span style={{ fontSize:13, flex:1 }}>{m.descripcio}</span>
-                <span style={{ fontSize:13, color:COLORS.green, marginRight:10 }}>{m.preu ? `${m.preu}€` : ""}</span>
                 <button className="btn btn-danger" style={{ padding:"2px 8px" }} onClick={() => eliminarMaterial(i)}>✕</button>
               </div>
             ))}
@@ -742,7 +691,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
             <input className="input" placeholder="Descripció material..." value={matInput}
               onChange={e=>{ setMatInput(e.target.value); filtrarSugerencias(e.target.value); setShowSug(true); }}
               onFocus={()=>{ filtrarSugerencias(matInput); setShowSug(true); }}
-              onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); afegirMaterial(matInput,matPreu); } }}
+              onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); afegirMaterial(matInput); } }}
             />
             {showSug && sugMaterials.length > 0 && (
               <div style={{ position:"absolute", top:"100%", left:0, right:0, background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:8, zIndex:50, maxHeight:180, overflowY:"auto" }}>
@@ -755,26 +704,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
               </div>
             )}
           </div>
-          <input className="input" placeholder="Preu €" style={{ width:90 }} value={matPreu}
-            onChange={e=>setMatPreu(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); afegirMaterial(matInput,matPreu); } }} />
-          <button className="btn btn-primary" style={{ whiteSpace:"nowrap" }} onClick={()=>afegirMaterial(matInput,matPreu)}>+ Afegir</button>
-        </div>
-      </div>
-
-      {/* TOTALS */}
-      <div style={{ background:COLORS.surface, borderRadius:10, padding:14 }}>
-        <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:15, marginBottom:12, color:COLORS.accent }}>💶 Totals</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label>Materials (€)</label><input className="input" value={form.totalMaterials} onChange={e=>setFormCalc({...form,totalMaterials:e.target.value})} /></div>
-          <div><label>Treballs (€)</label><input className="input" value={form.totalTreballs} onChange={e=>setFormCalc({...form,totalTreballs:e.target.value})} /></div>
-          <div><label>Desplaç./Dietes (€)</label><input className="input" value={form.totalDesplacaments} onChange={e=>setFormCalc({...form,totalDesplacaments:e.target.value})} /></div>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-          <div><label>Suma (€)</label><input className="input" value={form.suma} readOnly style={{ background:COLORS.bg }} /></div>
-          <div><label>IVA %</label><input className="input" type="number" value={form.iva} onChange={e=>setFormCalc({...form,iva:e.target.value})} /></div>
-          <div><label>IVA (€)</label><input className="input" value={form.totalIva} readOnly style={{ background:COLORS.bg }} /></div>
-          <div><label style={{ color:COLORS.green }}>TOTAL (€)</label><input className="input" value={form.total} readOnly style={{ background:COLORS.bg, fontWeight:700, color:COLORS.green, fontSize:15 }} /></div>
+          <button className="btn btn-primary" style={{ whiteSpace:"nowrap" }} onClick={()=>afegirMaterial(matInput)}>+ Afegir</button>
         </div>
       </div>
 
@@ -803,6 +733,9 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
         <button className="btn btn-ghost" onClick={onClose}>Cancel·lar</button>
         <button className="btn btn-ghost" onClick={descarregarPDF} disabled={generant}>
           {generant ? "Generant..." : "📄 Descarregar PDF"}
+        </button>
+        <button className="btn btn-ghost" onClick={enviarPerCorreu} disabled={generant} style={{ color: form.email ? COLORS.accent : COLORS.muted }}>
+          {generant ? "Generant..." : "📧 Enviar per correu"}
         </button>
         <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
           {guardando ? "Guardant..." : "💾 Guardar ☁"}
