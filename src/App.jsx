@@ -226,7 +226,7 @@ async function generarPDFHojaTreball(hoja) {
   pdf.text(hoja.client || "", cx+15, cy+8);
   pdf.text(hoja.domicili || "", cx+15, cy+17);
   const telPob = [hoja.telefon, hoja.poblacio].filter(Boolean).join("  /  ");
-  pdf.text(telPob, cx+23, cy+26);
+  pdf.text(telPob, cx+27, cy+26);
   const numNif = [hoja.numero ? `Núm. ${hoja.numero}` : "", hoja.nif ? `NIF: ${hoja.nif}` : ""].filter(Boolean).join("    ");
   pdf.text(numNif, cx+15, cy+35);
   pdf.text((hoja.operaris||[]).join(", "), cx+15, cy+44);
