@@ -634,15 +634,16 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     const enc = encargos.find(e=>e.id===encargoId);
     if (!enc) return;
     const asignados = Array.isArray(enc.asignados) ? enc.asignados : (enc.asignado ? [enc.asignado] : []);
+    const toStr = (v) => (v && typeof v === "object" && v.toDate) ? v.toDate().toISOString().split("T")[0] : (typeof v === "string" ? v : "");
     setFormCalc(f => ({
       ...f, encargoId,
-      client: enc.cliente || f.client,
-      domicili: enc.direccion || f.domicili,
-      poblacio: enc.localidad || f.poblacio,
-      telefon: enc.telefono || f.telefon,
+      client: toStr(enc.cliente) || f.client,
+      domicili: toStr(enc.direccion) || f.domicili,
+      poblacio: toStr(enc.localidad) || f.poblacio,
+      telefon: toStr(enc.telefono) || f.telefon,
       operaris: asignados.length > 0 ? asignados : f.operaris,
-      data: enc.fecha || f.data,
-      descripcio: enc.notas || f.descripcio,
+      data: toStr(enc.fecha) || f.data,
+      descripcio: toStr(enc.notas) || f.descripcio,
     }));
   };
 
@@ -656,7 +657,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
           <select className="select" style={{ width:"100%" }} value={form.encargoId||""} onChange={e=>omplirDesEncargo(e.target.value)}>
             <option value="">— Selecciona encàrrec —</option>
             {encargos.filter(e=>!e.archivado&&e.estado!=="Cancelado").map(e=>(
-              <option key={e.id} value={e.id}>{e.titulo} — {e.cliente}</option>
+              <option key={e.id} value={e.id}>{String(e.titulo||"")} — {String(e.cliente||"")}</option>
             ))}
           </select>
         </div>
