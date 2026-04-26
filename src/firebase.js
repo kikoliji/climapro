@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getMessaging, getToken } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBr-bc2Xvh-aKV7TOjfzumcRFlZf44E1xY",
@@ -14,3 +15,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+const messaging = getMessaging(app);
+
+export async function registrarTokenFCM(uid) {
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+    const token = await getToken(messaging, {
+      vapidKey: "BFvYCf-_94hdIYuL-8ewm7Rz6x-v0MeE1R_FtPMhPr_BvJbN8fuefBRarf1x73V8eWEl0dsVyRABaESWMl2vlkQ",
+    });
+    if (token) {
+      await setDoc(doc(db, "usuarios", uid), { fcmToken: token }, { merge: true });
+    }
+  } catch (e) {
+    console.error("Error registrant token FCM:", e);
+  }
+}

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { db, auth } from "./firebase";
+import { db, auth, registrarTokenFCM } from "./firebase";
 import {
   collection, addDoc, onSnapshot, orderBy, query,
-  deleteDoc, doc, updateDoc, setDoc, getDoc
+  deleteDoc, doc, updateDoc, setDoc, getDoc, runTransaction
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
@@ -358,6 +358,19 @@ function generarPDFHorario(trabajador, fichajes, empresa = "Nouaire") {
   pdf.save(`registre_horari_${trabajador.replace(/\s/g,"_")}_${ahora.getFullYear()}.pdf`);
 }
 
+async function generarNumeroAlbara() {
+  const comptadorRef = doc(db, "contadors", "albaranes");
+  const any = new Date().getFullYear();
+  let num;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(comptadorRef);
+    const ultim = snap.exists() ? (snap.data().ultim || 0) : 0;
+    num = ultim + 1;
+    transaction.set(comptadorRef, { ultim: num }, { merge: true });
+  });
+  return `ALB-${any}-${String(num).padStart(4, "0")}`;
+}
+
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function Login() {
   const [email, setEmail] = useState("");
@@ -555,6 +568,19 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     } else {
       const ref = await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: new Date().toISOString() });
       hojaId = ref.id;
+      // Crear albarà automàtic
+      const numeroAlbara = await generarNumeroAlbara();
+      await addDoc(collection(db,"albaranes"), {
+        numero: numeroAlbara,
+        cliente: form.client || "",
+        fecha: form.data || new Date().toISOString().split("T")[0],
+        descripcion: form.descripcio || "",
+        importe: 0,
+        estado: "Esborrany",
+        operaris: form.operaris || [],
+        origenFullId: hojaId,
+        createdAt: new Date().toISOString(),
+      });
       // Notificació a l'admin quan el treballador envia un full nou
       if (isWorker) {
         await addDoc(collection(db,"notificacions"), {
@@ -1028,7 +1054,7 @@ function ResumSetmanal({ nom, fichajes }) {
 }
 
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
-function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
+function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
   const [fichando, setFichando] = useState(false);
   const [mensajeGPS, setMensajeGPS] = useState("");
   const [encargoSeleccionado, setEncargoSeleccionado] = useState(null);
@@ -1048,6 +1074,10 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
       setMaterialsHistorial(snap.docs.map(d=>d.data().nom).filter(Boolean));
     });
   }, []);
+
+  useEffect(() => {
+    if (usuarioUid) registrarTokenFCM(usuarioUid);
+  }, [usuarioUid]);
 
   const misFichajesHoy = fichajes.filter(f=>f.trabajador===usuarioInfo.nombre&&f.fecha===hoy).sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||""));
   const misUltimos = fichajes.filter(f=>f.trabajador===usuarioInfo.nombre).slice(0,20);
@@ -1232,7 +1262,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
 // ─── GESTIÓ USUARIS ───────────────────────────────────────────────────────────
 function GestionUsuarios({ trabajadores }) {
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ email:"", password:"", nombre:"", rol:"trabajador" });
+  const [form, setForm] = useState({ email:"", password:"", nombre:"", rol:"trabajador", seccionsPermeses:[] });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [usuarios, setUsuarios] = useState([]);
@@ -1244,8 +1274,10 @@ function GestionUsuarios({ trabajadores }) {
     setGuardando(true); setError("");
     try {
       const cred = await createUserWithEmailAndPassword(auth,form.email,form.password);
-      await setDoc(doc(db,"usuarios",cred.user.uid),{ email:form.email, nombre:form.nombre, rol:form.rol });
-      setModal(false); setForm({ email:"", password:"", nombre:"", rol:"trabajador" });
+      const dades = { email:form.email, nombre:form.nombre, rol:form.rol };
+      if (form.rol === "secretaria") dades.seccionsPermeses = form.seccionsPermeses;
+      await setDoc(doc(db,"usuarios",cred.user.uid), dades);
+      setModal(false); setForm({ email:"", password:"", nombre:"", rol:"trabajador", seccionsPermeses:[] });
     } catch(e){ setError(e.code==="auth/email-already-in-use"?"Aquest email ja existeix":"Error en crear l'usuari"); }
     setGuardando(false);
   };
@@ -1255,10 +1287,10 @@ function GestionUsuarios({ trabajadores }) {
       <Header title="Gestió d'Usuaris ☁" onAdd={()=>setModal(true)} addLabel="+ Crear usuari" />
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
         {usuarios.map(u=>(
-          <div key={u.id} className="card" style={{ padding:20, borderLeft:`3px solid ${u.rol==="admin"?COLORS.yellow:COLORS.accent}` }}>
+          <div key={u.id} className="card" style={{ padding:20, borderLeft:`3px solid ${u.rol==="admin"?COLORS.yellow:u.rol==="secretaria"?COLORS.warm:COLORS.accent}` }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-              <div style={{ fontSize:28 }}>{u.rol==="admin"?"👑":"👷"}</div>
-              <span className="badge" style={{ background:u.rol==="admin"?"rgba(255,214,0,.2)":"rgba(0,196,255,.15)", color:u.rol==="admin"?COLORS.yellow:COLORS.accent }}>{u.rol==="admin"?"Administrador":"Treballador"}</span>
+              <div style={{ fontSize:28 }}>{u.rol==="admin"?"👑":u.rol==="secretaria"?"📋":"👷"}</div>
+              <span className="badge" style={{ background:u.rol==="admin"?"rgba(255,214,0,.2)":u.rol==="secretaria"?"rgba(255,107,53,.2)":"rgba(0,196,255,.15)", color:u.rol==="admin"?COLORS.yellow:u.rol==="secretaria"?COLORS.warm:COLORS.accent }}>{u.rol==="admin"?"Administrador":u.rol==="secretaria"?"Secretaria":"Treballador"}</span>
             </div>
             <div style={{ fontWeight:700, fontSize:15 }}>{u.nombre}</div>
             <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{u.email}</div>
@@ -1277,11 +1309,31 @@ function GestionUsuarios({ trabajadores }) {
           <div><label>Email</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
           <div><label>Contrasenya</label><input className="input" type="password" placeholder="Mínim 6 caràcters" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} /></div>
           <div><label>Rol</label>
-            <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e=>setForm({...form,rol:e.target.value})}>
+            <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e=>setForm({...form,rol:e.target.value,seccionsPermeses:[]})}>
               <option value="trabajador">Treballador</option>
+              <option value="secretaria">Secretaria</option>
               <option value="admin">Administrador</option>
             </select>
           </div>
+          {form.rol==="secretaria"&&(
+            <div>
+              <label>Seccions permeses</label>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:6 }}>
+                {NAV_ITEMS.filter(i=>i.id!=="usuarios").map(item=>{
+                  const sel=(form.seccionsPermeses||[]).includes(item.id);
+                  return (
+                    <label key={item.id} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"6px 10px", borderRadius:8, background:sel?COLORS.accentGlow:COLORS.surface, border:`1px solid ${sel?COLORS.accent:COLORS.border}`, fontSize:12, fontWeight:500, textTransform:"none", letterSpacing:0 }}>
+                      <input type="checkbox" checked={sel} onChange={()=>{
+                        const prev=form.seccionsPermeses||[];
+                        setForm({...form,seccionsPermeses:sel?prev.filter(x=>x!==item.id):[...prev,item.id]});
+                      }} style={{ accentColor:COLORS.accent }} />
+                      {item.icon} {item.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {error&&<div style={{ fontSize:13, color:COLORS.danger }}>{error}</div>}
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button>
@@ -1719,7 +1771,7 @@ function Albaranes({ albaranes }) {
 
   const abrirNuevo=()=>{setEditando(null);setForm(emptyForm);setModal(true);};
   const abrirEditar=(a)=>{setEditando(a);setForm({numero:a.numero,cliente:a.cliente,fecha:a.fecha,importe:String(a.importe),estado:a.estado,descripcion:a.descripcion||""});setModal(true);};
-  const guardar=async()=>{ if(!form.cliente)return;setGuardando(true); const nextNum=`ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`; const datos={...form,importe:Number(form.importe),numero:form.numero||nextNum}; if(editando)await updateDoc(doc(db,"albaranes",editando.id),datos); else await addDoc(collection(db,"albaranes"),datos); setGuardando(false);setModal(false); };
+  const guardar=async()=>{ if(!form.cliente)return;setGuardando(true); let numero=form.numero; if(!editando&&!numero)numero=await generarNumeroAlbara(); const datos={...form,importe:Number(form.importe),numero}; if(editando)await updateDoc(doc(db,"albaranes",editando.id),datos); else await addDoc(collection(db,"albaranes"),datos); setGuardando(false);setModal(false); };
   const eliminar=async(id)=>{await deleteDoc(doc(db,"albaranes",id));setConfirmarEliminar(null);};
   const cambiarEstado=async(id,estado)=>{await updateDoc(doc(db,"albaranes",id),{estado});};
   const lista=filtro==="Tots"?albaranes:albaranes.filter(a=>a.estado===filtro);
@@ -1923,6 +1975,53 @@ function NotificacionsAdmin() {
 }
 
 
+// ─── VISTA SECRETARIA ─────────────────────────────────────────────────────────
+function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajadores, hojesTreball, onManualesChange }) {
+  const permes = usuarioInfo.seccionsPermeses || [];
+  const navItems = NAV_ITEMS.filter(item => permes.includes(item.id));
+  const [section, setSection] = useState(navItems[0]?.id || null);
+
+  return (
+    <>
+      <style>{STYLE}</style>
+      <div style={{display:"flex",minHeight:"100vh"}}>
+        <div style={{width:230,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,padding:"20px 0",display:"flex",flexDirection:"column",flexShrink:0}}>
+          <div style={{padding:"0 16px 20px",borderBottom:`1px solid ${COLORS.border}`,textAlign:"center"}}>
+            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:36, maxWidth:"100%" }} />
+            <div style={{fontSize:10,color:COLORS.muted,marginTop:6}}>📋 {usuarioInfo?.nombre||"Secretaria"}</div>
+          </div>
+          <nav style={{padding:"12px 0",flex:1}}>
+            {navItems.map(item=>(
+              <button key={item.id} onClick={()=>setSection(item.id)}
+                style={{width:"100%",background:section===item.id?COLORS.accentGlow:"transparent",
+                  borderLeft:section===item.id?`3px solid ${COLORS.accent}`:"3px solid transparent",
+                  color:section===item.id?COLORS.accent:COLORS.muted,
+                  padding:"11px 16px",textAlign:"left",cursor:"pointer",border:"none",
+                  fontSize:12,fontFamily:"Inter",fontWeight:section===item.id?600:400,
+                  display:"flex",alignItems:"center",gap:8,transition:"all .15s"}}>
+                <span>{item.icon}</span>{item.label}
+              </button>
+            ))}
+          </nav>
+          <div style={{padding:"12px 16px",borderTop:`1px solid ${COLORS.border}`}}>
+            <button className="btn btn-ghost" style={{width:"100%",fontSize:12}} onClick={()=>signOut(auth)}>Tancar sessió</button>
+          </div>
+        </div>
+        <div style={{flex:1,padding:28,overflowY:"auto",maxHeight:"100vh"}}>
+          {!section&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",color:COLORS.muted,fontSize:14}}>Sense seccions assignades</div>}
+          {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
+          {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={false}/>}
+          {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
+          {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
+          {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
+          {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
+          {section==="manuales"&&<Manuales onManualesChange={onManualesChange}/>}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
@@ -2029,7 +2128,8 @@ export default function App() {
 
   if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"Inter"}}>Carregant...</div>;
   if(!usuario) return <Login />;
-  if(usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} />;
+  if(usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} />;
+  if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} onManualesChange={setManuales} />;
 
   return (
     <>
