@@ -62,8 +62,8 @@ const STYLE = `
   .canvas-firma { touch-action: none; cursor: crosshair; }
 `;
 
-const ESTADOS_ALBARAN = ["Borrador", "Enviado", "Cobrado", "Pendiente"];
-const ESTADOS_ENCARGO = ["Pendiente", "En curso", "Completado", "Cancelado"];
+const ESTADOS_ALBARAN = ["Esborrany", "Enviat", "Cobrat", "Pendent"];
+const ESTADOS_ENCARGO = ["Pendent", "En curs", "Completat", "Cancel·lat"];
 
 function calcHoras(entrada, salida) {
   if (!entrada || !salida) return "-";
@@ -99,11 +99,11 @@ function obtenerUbicacion() {
 }
 
 function LinkMapa({ lat, lng, precision }) {
-  if (!lat || !lng) return <span style={{ fontSize:11, color:COLORS.muted }}>Sin ubicación</span>;
+  if (!lat || !lng) return <span style={{ fontSize:11, color:COLORS.muted }}>Sense ubicació</span>;
   return (
     <a href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noreferrer"
       style={{ fontSize:11, color:COLORS.accent, textDecoration:"none" }}>
-      📍 Ver mapa {precision ? `(±${precision}m)` : ""}
+      📍 Veure mapa {precision ? `(±${precision}m)` : ""}
     </a>
   );
 }
@@ -144,7 +144,7 @@ function Lightbox({ fotos, indice, onClose }) {
           </>
         )}
       </div>
-      <div style={{ color:"rgba(255,255,255,.6)", fontSize:13 }}>{actual+1} / {fotos.length} · ESC para cerrar</div>
+      <div style={{ color:"rgba(255,255,255,.6)", fontSize:13 }}>{actual+1} / {fotos.length} · ESC per tancar</div>
     </div>
   );
 }
@@ -325,33 +325,33 @@ function generarPDFHorario(trabajador, fichajes, empresa = "Nouaire") {
 
   pdf.setFillColor(15, 17, 23); pdf.rect(0, 0, 210, 40, "F");
   pdf.setTextColor(0, 196, 255); pdf.setFontSize(20); pdf.setFont("helvetica", "bold");
-  pdf.text("REGISTRO DE JORNADA LABORAL", 105, 15, { align: "center" });
+  pdf.text("REGISTRE DE JORNADA LABORAL", 105, 15, { align: "center" });
   pdf.setTextColor(200, 200, 200); pdf.setFontSize(11);
   pdf.text(`Empresa: ${empresa}`, 105, 23, { align: "center" });
   pdf.setTextColor(150, 150, 150); pdf.setFontSize(9);
-  pdf.text("Art. 34.9 del Estatuto de los Trabajadores — RDL 8/2019", 105, 30, { align: "center" });
+  pdf.text("Art. 34.9 de l'Estatut dels Treballadors — RDL 8/2019", 105, 30, { align: "center" });
   pdf.setTextColor(30, 30, 30); pdf.setFontSize(11); pdf.setFont("helvetica", "bold");
-  pdf.text("DATOS DEL TRABAJADOR", 14, 50);
+  pdf.text("DADES DEL TREBALLADOR", 14, 50);
   pdf.setDrawColor(0, 196, 255); pdf.setLineWidth(0.5); pdf.line(14, 52, 196, 52);
   pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(50, 50, 50);
-  pdf.text(`Nombre: ${trabajador}`, 14, 60);
-  pdf.text(`Período: ${hace4años.toLocaleDateString("es-ES")} — ${ahora.toLocaleDateString("es-ES")}`, 14, 67);
+  pdf.text(`Nom: ${trabajador}`, 14, 60);
+  pdf.text(`Període: ${hace4años.toLocaleDateString("ca-ES")} — ${ahora.toLocaleDateString("ca-ES")}`, 14, 67);
   const totalMins = registros.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
-  pdf.text(`Total horas: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 120, 60);
+  pdf.text(`Total hores: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 120, 60);
   pdf.setFontSize(11); pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 30, 30);
-  pdf.text("REGISTROS DE JORNADA", 14, 80); pdf.line(14, 82, 196, 82);
+  pdf.text("REGISTRES DE JORNADA", 14, 80); pdf.line(14, 82, 196, 82);
 
   if (registros.length > 0) {
     const rows = [];
     Object.entries(porDia).forEach(([fecha, tramos]) => {
       const totalDia = tramos.reduce((s, f) => s + calcMinutos(f.entrada, f.salida), 0);
-      const dia = new Date(fecha + "T00:00:00").toLocaleDateString("es-ES", { weekday: "short" });
+      const dia = new Date(fecha + "T00:00:00").toLocaleDateString("ca-ES", { weekday: "short" });
       tramos.forEach((f, i) => {
         const ub = f.ubicacionEntrada ? `${f.ubicacionEntrada.lat.toFixed(4)},${f.ubicacionEntrada.lng.toFixed(4)}` : "—";
         rows.push([i===0?fecha:"", i===0?dia.charAt(0).toUpperCase()+dia.slice(1):"", `T${i+1}`, f.entrada||"—", f.salida||"—", calcHoras(f.entrada,f.salida), i===tramos.length-1?`${Math.floor(totalDia/60)}h ${totalDia%60}m`:"", ub]);
       });
     });
-    autoTable(pdf, { startY:87, head:[["Fecha","Día","T.","Entrada","Salida","Horas","Total","GPS"]], body:rows, headStyles:{fillColor:[15,17,23],textColor:[0,196,255],fontSize:7}, bodyStyles:{fontSize:7}, margin:{left:14,right:14} });
+    autoTable(pdf, { startY:87, head:[["Data","Dia","T.","Entrada","Sortida","Hores","Total","GPS"]], body:rows, headStyles:{fillColor:[15,17,23],textColor:[0,196,255],fontSize:7}, bodyStyles:{fontSize:7}, margin:{left:14,right:14} });
   }
   const tot = pdf.getNumberOfPages();
   for (let i=1;i<=tot;i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(150,150,150); pdf.text(`Pàgina ${i} de ${tot}`,105,290,{align:"center"}); }
@@ -412,15 +412,14 @@ function Modal({ title, onClose, children, wide, extraWide }) {
 
 function EstadoBadge({ estado }) {
   const colors = {
-    Cobrado:{bg:"rgba(0,230,118,.15)",color:COLORS.green}, Enviado:{bg:"rgba(0,196,255,.15)",color:COLORS.accent},
-    Borrador:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Pendiente:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    "En curso":{bg:"rgba(0,196,255,.15)",color:COLORS.accent}, Completado:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
-    Cancelado:{bg:"rgba(255,71,87,.15)",color:COLORS.danger}, Urgente:{bg:"rgba(255,71,87,.2)",color:COLORS.danger},
-    Alta:{bg:"rgba(255,107,53,.2)",color:COLORS.warm}, Media:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    Baja:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Activo:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
-    Inactivo:{bg:"rgba(139,143,168,.15)",color:COLORS.muted},
-    Signat:{bg:"rgba(0,230,118,.15)",color:COLORS.green}, Pendent:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    Enviat:{bg:"rgba(0,196,255,.15)",color:COLORS.accent},
+    Cobrat:{bg:"rgba(0,230,118,.15)",color:COLORS.green}, Enviat:{bg:"rgba(0,196,255,.15)",color:COLORS.accent},
+    Esborrany:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Pendent:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
+    "En curs":{bg:"rgba(0,196,255,.15)",color:COLORS.accent}, Completat:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
+    "Cancel·lat":{bg:"rgba(255,71,87,.15)",color:COLORS.danger}, Urgent:{bg:"rgba(255,71,87,.2)",color:COLORS.danger},
+    Alta:{bg:"rgba(255,107,53,.2)",color:COLORS.warm}, Mitjana:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
+    Baixa:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Actiu:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
+    Inactiu:{bg:"rgba(139,143,168,.15)",color:COLORS.muted},
+    Signat:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
   };
   const c = colors[estado]||{bg:"rgba(139,143,168,.15)",color:COLORS.muted};
   return <span className="badge" style={{background:c.bg,color:c.color}}>{estado}</span>;
@@ -525,7 +524,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const [matInput, setMatInput] = useState("");
   const [showSug, setShowSug] = useState(false);
 
-  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
+  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactiu").map(t=>t.nombre);
 
   // Autocompletado materiales
   const filtrarSugerencias = (text) => {
@@ -622,7 +621,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
           <label>Omplir des d'un encàrrec existent</label>
           <select className="select" style={{ width:"100%" }} value={form.encargoId||""} onChange={e=>omplirDesEncargo(e.target.value)}>
             <option value="">— Selecciona encàrrec —</option>
-            {encargos.filter(e=>!e.archivado&&e.estado!=="Cancelado").map(e=>(
+            {encargos.filter(e=>!e.archivado&&e.estado!=="Cancel·lat").map(e=>(
               <option key={e.id} value={e.id}>{String(e.titulo||"")} — {String(e.cliente||"")}</option>
             ))}
           </select>
@@ -866,7 +865,7 @@ function HojesTreball({ trabajadores, encargos }) {
       )}
 
       {confirmarEliminar && (
-        <Modal title="¿Eliminar full?" onClose={()=>setConfirmarEliminar(null)}>
+        <Modal title="Eliminar full?" onClose={()=>setConfirmarEliminar(null)}>
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:15, fontWeight:600, color:COLORS.accent }}>{confirmarEliminar.client} — {confirmarEliminar.data}</div>
             <div style={{ fontSize:13, color:COLORS.muted, marginTop:4 }}>No es pot desfer.</div>
@@ -907,7 +906,7 @@ function GestionarEncargo({ encargo, onClose }) {
     const ahora = new Date().toISOString().split("T")[0];
     await updateDoc(doc(db, "encargos", encargo.id), {
       estado, notasTrabajador: notas, fotos,
-      fechaCompletado: estado === "Completado" ? ahora : null,
+      fechaCompletado: estado === "Completat" ? ahora : null,
     });
     setGuardando(false); onClose();
   };
@@ -925,7 +924,7 @@ function GestionarEncargo({ encargo, onClose }) {
           <div>
             <label>Estat de l'encàrrec</label>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:6 }}>
-              {[{s:"Pendiente",icon:"⏳",color:COLORS.yellow},{s:"En curso",icon:"🔄",color:COLORS.accent},{s:"Completado",icon:"✅",color:COLORS.green}].map(({s,icon,color})=>(
+              {[{s:"Pendent",icon:"⏳",color:COLORS.yellow},{s:"En curs",icon:"🔄",color:COLORS.accent},{s:"Completat",icon:"✅",color:COLORS.green}].map(({s,icon,color})=>(
                 <button key={s} onClick={()=>setEstado(s)} style={{ padding:"14px 8px", borderRadius:12, cursor:"pointer", border:"none", background:estado===s?color:COLORS.surface, color:estado===s?"#000":COLORS.muted, fontSize:13, fontWeight:700, fontFamily:"Inter", outline:estado===s?`3px solid ${color}`:`1px solid ${COLORS.border}`, display:"flex", flexDirection:"column", alignItems:"center", gap:6, transition:"all .15s", transform:estado===s?"scale(1.04)":"scale(1)" }}>
                   <span style={{ fontSize:22 }}>{icon}</span>{s}
                 </button>
@@ -1055,8 +1054,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const misEncargos = encargos.filter(e=>{
     const asignados = Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]);
     if (!asignados.includes(usuarioInfo.nombre)) return false;
-    if (e.estado==="Cancelado") return false;
-    if (e.estado==="Completado"&&e.fechaCompletado&&e.fechaCompletado<hoy) return false;
+    if (e.estado==="Cancel·lat") return false;
+    if (e.estado==="Completat"&&e.fechaCompletado&&e.fechaCompletado<hoy) return false;
     return true;
   });
 
@@ -1083,7 +1082,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
 
   const porFecha = {};
   misUltimos.forEach(f=>{if(!porFecha[f.fecha])porFecha[f.fecha]=[];porFecha[f.fecha].push(f);});
-  const colorEstado = {"Pendiente":COLORS.yellow,"En curso":COLORS.accent,"Completado":COLORS.green};
+  const colorEstado = {"Pendent":COLORS.yellow,"En curs":COLORS.accent,"Completat":COLORS.green};
 
   return (
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
@@ -1135,7 +1134,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             : misEncargos.map(e=>{
               const estadoColor = colorEstado[e.estado]||COLORS.muted;
               return (
-                <div key={e.id} style={{ padding:"16px", marginBottom:10, borderRadius:12, background:e.estado==="Completado"?"rgba(0,230,118,.06)":COLORS.surface, border:`1px solid ${e.estado==="Completado"?COLORS.green+"44":COLORS.border}` }}>
+                <div key={e.id} style={{ padding:"16px", marginBottom:10, borderRadius:12, background:e.estado==="Completat"?"rgba(0,230,118,.06)":COLORS.surface, border:`1px solid ${e.estado==="Completat"?COLORS.green+"44":COLORS.border}` }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
                     <div style={{ flex:1 }}>
                       <div style={{ display:"flex", gap:8, marginBottom:6, flexWrap:"wrap" }}>
@@ -1149,8 +1148,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
                       {e.notasTrabajador&&<div style={{ fontSize:12, color:COLORS.yellow, marginTop:6, background:"rgba(255,214,0,.08)", padding:"6px 10px", borderRadius:6 }}>⚠ {e.notasTrabajador}</div>}
                       {e.fotos?.length>0&&<div style={{ fontSize:11, color:COLORS.green, marginTop:4 }}>📷 {e.fotos.length} foto{e.fotos.length!==1?"s":""}</div>}
                     </div>
-                    <button onClick={()=>setEncargoSeleccionado(e)} style={{ padding:"10px 16px", borderRadius:10, cursor:"pointer", border:"none", background:e.estado==="Completado"?COLORS.green:COLORS.accent, color:"#000", fontSize:13, fontWeight:700, fontFamily:"Inter", whiteSpace:"nowrap", flexShrink:0 }}>
-                      {e.estado==="Completado"?"✅ Veure":"✏ Gestionar"}
+                    <button onClick={()=>setEncargoSeleccionado(e)} style={{ padding:"10px 16px", borderRadius:10, cursor:"pointer", border:"none", background:e.estado==="Completat"?COLORS.green:COLORS.accent, color:"#000", fontSize:13, fontWeight:700, fontFamily:"Inter", whiteSpace:"nowrap", flexShrink:0 }}>
+                      {e.estado==="Completat"?"✅ Veure":"✏ Gestionar"}
                     </button>
                   </div>
                 </div>
@@ -1219,7 +1218,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           <FormHojaTreball
             hoja={editantFull}
             onClose={()=>setMostrarFormFull(false)}
-            trabajadores={[{id:"w", nombre:usuarioInfo.nombre, estado:"Activo"}]}
+            trabajadores={[{id:"w", nombre:usuarioInfo.nombre, estado:"Actiu"}]}
             encargos={encargos}
             materialsHistorial={materialsHistorial}
             isWorker={usuarioInfo.nombre}
@@ -1300,14 +1299,14 @@ function Trabajadores({ trabajadores, cargandoT }) {
   const [editando, setEditando] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
-  const [form, setForm] = useState({ nombre:"", telefono:"", email:"", cargo:"Tècnic", estado:"Activo", notas:"" });
+  const [form, setForm] = useState({ nombre:"", telefono:"", email:"", cargo:"Tècnic", estado:"Actiu", notas:"" });
 
-  const abrirNuevo=()=>{setEditando(null);setForm({nombre:"",telefono:"",email:"",cargo:"Tècnic",estado:"Activo",notas:""});setModal(true);};
-  const abrirEditar=(t)=>{setEditando(t);setForm({nombre:t.nombre,telefono:t.telefono||"",email:t.email||"",cargo:t.cargo||"Tècnic",estado:t.estado||"Activo",notas:t.notas||""});setModal(true);};
+  const abrirNuevo=()=>{setEditando(null);setForm({nombre:"",telefono:"",email:"",cargo:"Tècnic",estado:"Actiu",notas:""});setModal(true);};
+  const abrirEditar=(t)=>{setEditando(t);setForm({nombre:t.nombre,telefono:t.telefono||"",email:t.email||"",cargo:t.cargo||"Tècnic",estado:t.estado||"Actiu",notas:t.notas||""});setModal(true);};
   const guardar=async()=>{ if(!form.nombre)return;setGuardando(true); if(editando)await updateDoc(doc(db,"trabajadores",editando.id),form); else await addDoc(collection(db,"trabajadores"),form); setGuardando(false);setModal(false); };
   const eliminar=async(id)=>{await deleteDoc(doc(db,"trabajadores",id));setConfirmarEliminar(null);};
-  const activos=trabajadores.filter(t=>t.estado!=="Inactivo");
-  const inactivos=trabajadores.filter(t=>t.estado==="Inactivo");
+  const activos=trabajadores.filter(t=>t.estado!=="Inactiu");
+  const inactivos=trabajadores.filter(t=>t.estado==="Inactiu");
 
   return (
     <div>
@@ -1320,7 +1319,7 @@ function Trabajadores({ trabajadores, cargandoT }) {
               <div key={t.id} className="card" style={{padding:20,borderLeft:`3px solid ${COLORS.accent}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                   <div><div style={{fontSize:32,marginBottom:4}}>👷</div><div style={{fontWeight:700,fontSize:15}}>{t.nombre}</div><div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>{t.cargo}</div></div>
-                  <EstadoBadge estado={t.estado||"Activo"} />
+                  <EstadoBadge estado={t.estado||"Actiu"} />
                 </div>
                 {t.telefono&&<div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>📱 {t.telefono}</div>}
                 {t.email&&<div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>✉ {t.email}</div>}
@@ -1353,7 +1352,7 @@ function Trabajadores({ trabajadores, cargandoT }) {
           <div><label>Nom *</label><input className="input" value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Càrrec</label><select className="select" style={{width:"100%"}} value={form.cargo} onChange={e=>setForm({...form,cargo:e.target.value})}>{["Tècnic","Oficial","Ajudant","Cap d'obra","Administratiu","Altre"].map(c=><option key={c}>{c}</option>)}</select></div>
-            <div><label>Estat</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}><option>Activo</option><option>Inactivo</option></select></div>
+            <div><label>Estat</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}><option>Actiu</option><option>Inactiu</option></select></div>
           </div>
           <div><label>Telèfon</label><input className="input" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
           <div><label>Email</label><input className="input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
@@ -1364,7 +1363,7 @@ function Trabajadores({ trabajadores, cargandoT }) {
           </div>
         </div>
       </Modal>}
-      {confirmarEliminar&&<Modal title="¿Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
+      {confirmarEliminar&&<Modal title="Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.nombre}</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
@@ -1378,11 +1377,11 @@ function Fichajes({ trabajadores, fichajes }) {
   const [guardando, setGuardando] = useState(false);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [filtroFecha, setFiltroFecha] = useState("");
-  const [filtroTrabajador, setFiltroTrabajador] = useState("Todos");
+  const [filtroTrabajador, setFiltroTrabajador] = useState("Tots");
   const [modalPDF, setModalPDF] = useState(false);
   const [trabajadorPDF, setTrabajadorPDF] = useState("");
   const [vistaAgrupada, setVistaAgrupada] = useState(true);
-  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
+  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactiu").map(t=>t.nombre);
   const todosNombres = trabajadores.map(t=>t.nombre);
   const [form, setForm] = useState({ trabajador:nombresActivos[0]||"", fecha:new Date().toISOString().split("T")[0], entrada:"08:00", salida:"", notas:"" });
 
@@ -1392,7 +1391,7 @@ function Fichajes({ trabajadores, fichajes }) {
   const eliminar=async(id)=>{await deleteDoc(doc(db,"fichajes",id));setConfirmarEliminar(null);};
   const registrarSalida=async(f)=>{await updateDoc(doc(db,"fichajes",f.id),{salida:horaActual()});};
 
-  const lista=fichajes.filter(f=>filtroTrabajador==="Todos"||f.trabajador===filtroTrabajador).filter(f=>!filtroFecha||f.fecha===filtroFecha);
+  const lista=fichajes.filter(f=>filtroTrabajador==="Tots"||f.trabajador===filtroTrabajador).filter(f=>!filtroFecha||f.fecha===filtroFecha);
   const horasTotal=lista.reduce((s,f)=>s+calcMinutos(f.entrada,f.salida),0);
   const grupos={};
   lista.forEach(f=>{const clave=`${f.trabajador}__${f.fecha}`;if(!grupos[clave])grupos[clave]={trabajador:f.trabajador,fecha:f.fecha,tramos:[],totalMins:0};grupos[clave].tramos.push(f);grupos[clave].totalMins+=calcMinutos(f.entrada,f.salida);});
@@ -1410,7 +1409,7 @@ function Fichajes({ trabajadores, fichajes }) {
       </div>
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
         <select className="select" value={filtroTrabajador} onChange={e=>setFiltroTrabajador(e.target.value)}>
-          <option value="Todos">Tots els treballadors</option>
+          <option value="Tots">Tots els treballadors</option>
           {nombresActivos.map(t=><option key={t}>{t}</option>)}
         </select>
         <input className="input" type="date" style={{width:"auto"}} value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} />
@@ -1469,7 +1468,7 @@ function Fichajes({ trabajadores, fichajes }) {
           </div>
         </div>
       </Modal>}
-      {confirmarEliminar&&<Modal title="¿Eliminar tram?" onClose={()=>setConfirmarEliminar(null)}>
+      {confirmarEliminar&&<Modal title="Eliminar tram?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha}</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
@@ -1505,24 +1504,24 @@ function Encargos({ trabajadores }) {
   const [resultadoImport, setResultadoImport] = useState(null);
   const [lightboxAdmin, setLightboxAdmin] = useState(null);
   const [vistaArchivados, setVistaArchivados] = useState(false);
-  const [filtroEstado, setFiltroEstado] = useState("Todos");
+  const [filtroEstado, setFiltroEstado] = useState("Tots");
   const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
   const [filtroTrabajador, setFiltroTrabajador] = useState("");
   const [filtroLocalidad, setFiltroLocalidad] = useState("");
   const [filtroBusqueda, setFiltroBusqueda] = useState("");
-  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactivo").map(t=>t.nombre);
-  const emptyForm = { titulo:"", cliente:"", asignados:[], prioridad:"Media", estado:"Pendiente", fecha:"", notas:"", localidad:"", direccion:"", telefono:"", archivado:false };
+  const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactiu").map(t=>t.nombre);
+  const emptyForm = { titulo:"", cliente:"", asignados:[], prioridad:"Mitjana", estado:"Pendent", fecha:"", notas:"", localidad:"", direccion:"", telefono:"", archivado:false };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(()=>{ const q=query(collection(db,"encargos"),orderBy("fecha","desc")); return onSnapshot(q,snap=>{setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})));setCargando(false);}); },[]);
 
-  const limpiarFiltros=()=>{setFiltroEstado("Todos");setFiltroFechaDesde("");setFiltroFechaHasta("");setFiltroTrabajador("");setFiltroLocalidad("");setFiltroBusqueda("");};
-  const hayFiltros=filtroEstado!=="Todos"||filtroFechaDesde||filtroFechaHasta||filtroTrabajador||filtroLocalidad||filtroBusqueda;
+  const limpiarFiltros=()=>{setFiltroEstado("Tots");setFiltroFechaDesde("");setFiltroFechaHasta("");setFiltroTrabajador("");setFiltroLocalidad("");setFiltroBusqueda("");};
+  const hayFiltros=filtroEstado!=="Tots"||filtroFechaDesde||filtroFechaHasta||filtroTrabajador||filtroLocalidad||filtroBusqueda;
 
   const lista=encargos
     .filter(e=>vistaArchivados?e.archivado:!e.archivado)
-    .filter(e=>filtroEstado==="Todos"||e.estado===filtroEstado)
+    .filter(e=>filtroEstado==="Tots"||e.estado===filtroEstado)
     .filter(e=>!filtroFechaDesde||e.fecha>=filtroFechaDesde)
     .filter(e=>!filtroFechaHasta||e.fecha<=filtroFechaHasta)
     .filter(e=>!filtroTrabajador||(Array.isArray(e.asignados)?e.asignados.includes(filtroTrabajador):e.asignado===filtroTrabajador))
@@ -1530,12 +1529,12 @@ function Encargos({ trabajadores }) {
     .filter(e=>!filtroBusqueda||e.titulo?.toLowerCase().includes(filtroBusqueda.toLowerCase())||e.cliente?.toLowerCase().includes(filtroBusqueda.toLowerCase()));
 
   const abrirNuevo=()=>{setEditando(null);setForm(emptyForm);setModal(true);};
-  const abrirEditar=(e)=>{ setEditando(e); const asignados=Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]); const toStr=(v)=>(v&&typeof v==="object"&&v.toDate)?v.toDate().toISOString().split("T")[0]:(typeof v==="string"?v:""); setForm({titulo:e.titulo||"",cliente:e.cliente||"",asignados,prioridad:e.prioridad||"Media",estado:e.estado||"Pendiente",fecha:toStr(e.fecha),notas:e.notas||"",localidad:e.localidad||"",direccion:e.direccion||"",telefono:e.telefono||"",archivado:e.archivado||false}); setModal(true); };
+  const abrirEditar=(e)=>{ setEditando(e); const asignados=Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]); const toStr=(v)=>(v&&typeof v==="object"&&v.toDate)?v.toDate().toISOString().split("T")[0]:(typeof v==="string"?v:""); setForm({titulo:e.titulo||"",cliente:e.cliente||"",asignados,prioridad:e.prioridad||"Mitjana",estado:e.estado||"Pendent",fecha:toStr(e.fecha),notas:e.notas||"",localidad:e.localidad||"",direccion:e.direccion||"",telefono:e.telefono||"",archivado:e.archivado||false}); setModal(true); };
   const guardar=async()=>{ if(!form.titulo)return;setGuardando(true); const datos={...form,asignado:form.asignados[0]||""}; if(editando)await updateDoc(doc(db,"encargos",editando.id),datos); else await addDoc(collection(db,"encargos"),datos); setGuardando(false);setModal(false); };
   const eliminar=async(id)=>{await deleteDoc(doc(db,"encargos",id));setConfirmarEliminar(null);};
-  const cambiarEstado=async(id,estado)=>{ const ahora=new Date().toISOString().split("T")[0]; await updateDoc(doc(db,"encargos",id),{estado,fechaCompletado:estado==="Completado"?ahora:null}); };
+  const cambiarEstado=async(id,estado)=>{ const ahora=new Date().toISOString().split("T")[0]; await updateDoc(doc(db,"encargos",id),{estado,fechaCompletado:estado==="Completat"?ahora:null}); };
   const archivar=async(id,archivado)=>{await updateDoc(doc(db,"encargos",id),{archivado});};
-  const archivarTodosCompletados=async()=>{ const c=encargos.filter(e=>e.estado==="Completado"&&!e.archivado); for(const e of c)await updateDoc(doc(db,"encargos",e.id),{archivado:true}); };
+  const archivarTodosCompletados=async()=>{ const c=encargos.filter(e=>e.estado==="Completat"&&!e.archivado); for(const e of c)await updateDoc(doc(db,"encargos",e.id),{archivado:true}); };
   const toggleAsignado=(nom)=>{ const actual=form.asignados||[]; setForm({...form,asignados:actual.includes(nom)?actual.filter(n=>n!==nom):[...actual,nom]}); };
 
   const importarSmartsheet=async(archivo)=>{
@@ -1556,7 +1555,7 @@ function Encargos({ trabajadores }) {
         const telefono=String(fila["TELÈFON"]||fila["TELÉFONO"]||"").trim();
         const notas=String(fila["Comentarios"]||"").trim();
         if(!titulo&&!cliente){saltados++;continue;}
-        await addDoc(collection(db,"encargos"),{titulo:titulo||`Encàrrec ${cliente}`,cliente,asignados:asignado?[asignado]:[],asignado,localidad,direccion,telefono,notas,fecha,prioridad:"Media",estado:"Pendiente",archivado:false});
+        await addDoc(collection(db,"encargos"),{titulo:titulo||`Encàrrec ${cliente}`,cliente,asignados:asignado?[asignado]:[],asignado,localidad,direccion,telefono,notas,fecha,prioridad:"Mitjana",estado:"Pendent",archivado:false});
         importados++;
       }
       setResultadoImport({importados,saltados});
@@ -1587,7 +1586,7 @@ function Encargos({ trabajadores }) {
       )}
 
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-        {["Todos",...ESTADOS_ENCARGO].map(f=><button key={f} className="btn" onClick={()=>setFiltroEstado(f)} style={{background:filtroEstado===f?COLORS.accent:COLORS.surface,color:filtroEstado===f?"#000":COLORS.muted,border:`1px solid ${filtroEstado===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
+        {["Tots",...ESTADOS_ENCARGO].map(f=><button key={f} className="btn" onClick={()=>setFiltroEstado(f)} style={{background:filtroEstado===f?COLORS.accent:COLORS.surface,color:filtroEstado===f?"#000":COLORS.muted,border:`1px solid ${filtroEstado===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
       </div>
 
       <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center",padding:"10px 14px",background:COLORS.surface,borderRadius:10,border:`1px solid ${COLORS.border}`}}>
@@ -1673,7 +1672,7 @@ function Encargos({ trabajadores }) {
           </div>
           <div><label>Adreça</label><input className="input" value={form.direccion} onChange={e=>setForm({...form,direccion:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div><label>Prioritat</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baja","Media","Alta","Urgente"].map(p=><option key={p}>{p}</option>)}</select></div>
+            <div><label>Prioritat</label><select className="select" style={{width:"100%"}} value={form.prioridad} onChange={e=>setForm({...form,prioridad:e.target.value})}>{["Baixa","Mitjana","Alta","Urgent"].map(p=><option key={p}>{p}</option>)}</select></div>
             <div><label>Estat</label><select className="select" style={{width:"100%"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_ENCARGO.map(s=><option key={s}>{s}</option>)}</select></div>
           </div>
           <div>
@@ -1700,7 +1699,7 @@ function Encargos({ trabajadores }) {
           </div>
         </div>
       </Modal>}
-      {confirmarEliminar&&<Modal title="¿Eliminar encàrrec?" onClose={()=>setConfirmarEliminar(null)}>
+      {confirmarEliminar&&<Modal title="Eliminar encàrrec?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
@@ -1714,8 +1713,8 @@ function Albaranes({ albaranes }) {
   const [editando, setEditando] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
-  const [filtro, setFiltro] = useState("Todos");
-  const emptyForm = { numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Borrador", descripcion:"" };
+  const [filtro, setFiltro] = useState("Tots");
+  const emptyForm = { numero:"", cliente:"", fecha:new Date().toISOString().split("T")[0], importe:"", estado:"Esborrany", descripcion:"" };
   const [form, setForm] = useState(emptyForm);
 
   const abrirNuevo=()=>{setEditando(null);setForm(emptyForm);setModal(true);};
@@ -1723,14 +1722,14 @@ function Albaranes({ albaranes }) {
   const guardar=async()=>{ if(!form.cliente)return;setGuardando(true); const nextNum=`ALB-${new Date().getFullYear()}-${String(albaranes.length+1).padStart(3,"0")}`; const datos={...form,importe:Number(form.importe),numero:form.numero||nextNum}; if(editando)await updateDoc(doc(db,"albaranes",editando.id),datos); else await addDoc(collection(db,"albaranes"),datos); setGuardando(false);setModal(false); };
   const eliminar=async(id)=>{await deleteDoc(doc(db,"albaranes",id));setConfirmarEliminar(null);};
   const cambiarEstado=async(id,estado)=>{await updateDoc(doc(db,"albaranes",id),{estado});};
-  const lista=filtro==="Todos"?albaranes:albaranes.filter(a=>a.estado===filtro);
+  const lista=filtro==="Tots"?albaranes:albaranes.filter(a=>a.estado===filtro);
   const total=lista.reduce((s,a)=>s+a.importe,0);
 
   return (
     <div>
       <Header title="Albarans ☁" onAdd={abrirNuevo} addLabel="+ Nou albarà" />
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
-        {["Todos",...ESTADOS_ALBARAN].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
+        {["Tots",...ESTADOS_ALBARAN].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
         <span style={{marginLeft:"auto",alignSelf:"center",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>Total: {total.toLocaleString()}€</span>
       </div>
       <div className="card" style={{overflow:"hidden"}}>
@@ -1769,7 +1768,7 @@ function Albaranes({ albaranes }) {
           </div>
         </div>
       </Modal>}
-      {confirmarEliminar&&<Modal title="¿Eliminar albarà?" onClose={()=>setConfirmarEliminar(null)}>
+      {confirmarEliminar&&<Modal title="Eliminar albarà?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.numero} — {confirmarEliminar.cliente}</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
@@ -1848,7 +1847,7 @@ function Manuales({ onManualesChange }) {
           })}
         </div>
       )}
-      {confirmarEliminar&&<Modal title="¿Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
+      {confirmarEliminar&&<Modal title="Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div></div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
@@ -1927,20 +1926,20 @@ function NotificacionsAdmin() {
 function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
-  const encargosActivos=encargos.filter(e=>!e.archivado&&(e.estado==="En curso"||e.estado==="Pendiente")).length;
-  const materialFaltante=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado"&&!e.archivado).length;
-  const totalFacturado=albaranes.filter(a=>a.estado==="Cobrado").reduce((s,a)=>s+a.importe,0);
+  const encargosActivos=encargos.filter(e=>!e.archivado&&(e.estado==="En curs"||e.estado==="Pendent")).length;
+  const materialFaltante=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completat"&&!e.archivado).length;
+  const totalFacturado=albaranes.filter(a=>a.estado==="Cobrat").reduce((s,a)=>s+a.importe,0);
   const fullsPendents=(hojesTreball||[]).filter(h=>h.estat==="Pendent"||!h.estat).length;
 
   const stats=[
-    {label:"Treballadors actius",value:trabajadores.filter(t=>t.estado!=="Inactivo").length,color:COLORS.accent,icon:"👷"},
+    {label:"Treballadors actius",value:trabajadores.filter(t=>t.estado!=="Inactiu").length,color:COLORS.accent,icon:"👷"},
     {label:"Fitxats avui",value:fichajesHoy,color:COLORS.green,icon:"⏱"},
     {label:"Encàrrecs actius",value:encargosActivos,color:COLORS.warm,icon:"🔧"},
     {label:"Fulls pendents",value:fullsPendents,color:COLORS.yellow,icon:"📋"},
   ];
 
-  const urgentes=encargos.filter(e=>e.prioridad==="Urgente"&&e.estado!=="Completado"&&!e.archivado);
-  const conMaterial=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completado"&&!e.archivado);
+  const urgentes=encargos.filter(e=>e.prioridad==="Urgent"&&e.estado!=="Completat"&&!e.archivado);
+  const conMaterial=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completat"&&!e.archivado);
   const fichajesHoyList=fichajes.filter(f=>f.fecha===hoy).slice(0,6);
 
   return (
@@ -1984,7 +1983,7 @@ function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }
       </div>
       {conMaterial.length>0&&(
         <div className="card" style={{padding:20,borderLeft:`3px solid ${COLORS.yellow}`}}>
-          <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.yellow}}>📦 Material pending</div>
+          <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.yellow}}>📦 Material pendent</div>
           {conMaterial.map(e=>(
             <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
               <div style={{fontSize:13,fontWeight:500}}>{e.titulo} <span style={{fontSize:12,color:COLORS.muted}}>— {Array.isArray(e.asignados)?e.asignados.join(", "):e.asignado}</span></div>
