@@ -508,7 +508,7 @@ function CanvasSignatura({ onSave, onCancel }) {
 }
 
 // ─── HOJA DE TRABAJO — FORMULARIO ────────────────────────────────────────────
-function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHistorial }) {
+function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHistorial, isWorker }) {
   const emptyForm = {
     numero: "", data: new Date().toISOString().split("T")[0],
     client: "", domicili: "", poblacio: "", telefon: "", nif: "",
@@ -550,9 +550,23 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const guardar = async () => {
     setGuardando(true);
     const dades = { ...form, updatedAt: new Date().toISOString() };
-    if (hoja?.id) await updateDoc(doc(db,"hojesTreball",hoja.id), dades);
-    else await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: new Date().toISOString() });
-
+    let hojaId = hoja?.id;
+    if (hojaId) {
+      await updateDoc(doc(db,"hojesTreball",hojaId), dades);
+    } else {
+      const ref = await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: new Date().toISOString() });
+      hojaId = ref.id;
+      // Notificació a l'admin quan el treballador envia un full nou
+      if (isWorker) {
+        await addDoc(collection(db,"notificacions"), {
+          tipus: "full_enviat",
+          missatge: `${isWorker} ha enviat un full de treball (client: ${form.client||"—"})`,
+          hojaId,
+          llegida: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
     // Guardar materials nous a l'historial
     for (const mat of (form.materials||[])) {
       if (mat.descripcio && !materialsHistorial.includes(mat.descripcio)) {
@@ -951,12 +965,90 @@ function GestionarEncargo({ encargo, onClose }) {
   );
 }
 
+// ─── HELPER: dades de la setmana actual (Dl–Dv) ──────────────────────────────
+function getSetmanaActual() {
+  const avui = new Date();
+  const diaSemana = avui.getDay(); // 0=dg,1=dl...6=ds
+  const difDl = diaSemana === 0 ? -6 : 1 - diaSemana;
+  const dies = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(avui);
+    d.setDate(avui.getDate() + difDl + i);
+    dies.push(d.toISOString().split("T")[0]);
+  }
+  return dies;
+}
+
+// ─── RESUM SETMANAL ───────────────────────────────────────────────────────────
+function ResumSetmanal({ nom, fichajes }) {
+  const dies = getSetmanaActual();
+  const avui = new Date().toISOString().split("T")[0];
+  const nomsDia = ["Dl","Dt","Dc","Dj","Dv"];
+  return (
+    <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.yellow}` }}>
+      <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:17, marginBottom:14, color:COLORS.yellow }}>📅 Resum setmanal</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
+        {dies.map((dia, i) => {
+          const tramsDia = fichajes.filter(f=>f.trabajador===nom&&f.fecha===dia);
+          const mins = tramsDia.reduce((s,f)=>s+calcMinutos(f.entrada,f.salida),0);
+          const esAvui = dia === avui;
+          const esFutur = dia > avui;
+          const pocesHores = !esFutur && mins > 0 && mins < 480;
+          const senseFitxar = !esFutur && mins === 0;
+          let borderColor = COLORS.border;
+          if (esAvui) borderColor = COLORS.accent;
+          else if (pocesHores) borderColor = COLORS.yellow;
+          else if (senseFitxar && !esFutur) borderColor = COLORS.danger;
+          else if (mins >= 480) borderColor = COLORS.green;
+          return (
+            <div key={dia} style={{ textAlign:"center", padding:"10px 6px", borderRadius:10, border:`1px solid ${borderColor}`, background: esAvui?"rgba(0,196,255,.07)":COLORS.surface, position:"relative" }}>
+              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:600, marginBottom:4 }}>{nomsDia[i]}</div>
+              <div style={{ fontSize:10, color:COLORS.muted, marginBottom:6 }}>{dia.slice(5)}</div>
+              {esFutur ? (
+                <div style={{ fontSize:12, color:COLORS.muted }}>—</div>
+              ) : mins === 0 ? (
+                <div style={{ fontSize:11, color:COLORS.danger }}>⚠ 0h</div>
+              ) : (
+                <div style={{ fontSize:13, fontWeight:700, color: mins>=480?COLORS.green:COLORS.yellow, fontFamily:"Rajdhani" }}>
+                  {Math.floor(mins/60)}h{mins%60>0?` ${mins%60}m`:""}
+                </div>
+              )}
+              {pocesHores && <div style={{ fontSize:9, color:COLORS.yellow, marginTop:3 }}>Menys de 8h</div>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display:"flex", gap:16, marginTop:12, flexWrap:"wrap" }}>
+        <span style={{ fontSize:11, color:COLORS.green }}>● ≥8h</span>
+        <span style={{ fontSize:11, color:COLORS.yellow }}>● &lt;8h</span>
+        <span style={{ fontSize:11, color:COLORS.danger }}>● Sense fitxar</span>
+        <span style={{ fontSize:11, color:COLORS.accent }}>● Avui</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
   const [fichando, setFichando] = useState(false);
   const [mensajeGPS, setMensajeGPS] = useState("");
   const [encargoSeleccionado, setEncargoSeleccionado] = useState(null);
+  const [mostrarFormFull, setMostrarFormFull] = useState(false);
+  const [editantFull, setEditantFull] = useState(null);
+  const [mevesFulles, setMevesFulles] = useState([]);
+  const [materialsHistorial, setMaterialsHistorial] = useState([]);
   const hoy = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    const q = query(collection(db,"hojesTreball"), orderBy("createdAt","desc"));
+    return onSnapshot(q, snap => setMevesFulles(snap.docs.map(d=>({id:d.id,...d.data()})).filter(h=>(h.operaris||[]).includes(usuarioInfo.nombre))));
+  }, [usuarioInfo.nombre]);
+
+  useEffect(() => {
+    return onSnapshot(collection(db,"materialsHistorial"), snap => {
+      setMaterialsHistorial(snap.docs.map(d=>d.data().nom).filter(Boolean));
+    });
+  }, []);
 
   const misFichajesHoy = fichajes.filter(f=>f.trabajador===usuarioInfo.nombre&&f.fecha===hoy).sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||""));
   const misUltimos = fichajes.filter(f=>f.trabajador===usuarioInfo.nombre).slice(0,20);
@@ -1003,6 +1095,10 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
         </div>
       </div>
       <div style={{ padding:20, maxWidth:860, margin:"0 auto" }}>
+
+        {/* RESUM SETMANAL */}
+        <ResumSetmanal nom={usuarioInfo.nombre} fichajes={fichajes} />
+
         {/* FICHAR */}
         <div className="card" style={{ padding:24, marginBottom:20, borderTop:`3px solid ${COLORS.accent}` }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
@@ -1063,6 +1159,35 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
           }
         </div>
 
+        {/* FULLS DE TREBALL DEL TREBALLADOR */}
+        <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.green}` }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, color:COLORS.green }}>📋 Els meus fulls de treball ({mevesFulles.length})</div>
+            <button className="btn btn-primary" style={{ fontSize:13 }} onClick={()=>{ setEditantFull(null); setMostrarFormFull(true); }}>
+              + Crear full de treball
+            </button>
+          </div>
+          {mevesFulles.length === 0
+            ? <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:16 }}>Encara no tens cap full de treball</div>
+            : mevesFulles.slice(0,10).map(h=>(
+              <div key={h.id} style={{ padding:"12px 14px", marginBottom:8, borderRadius:10, background:COLORS.surface, border:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
+                    <EstadoBadge estado={h.estat||"Pendent"} />
+                    {h.numero&&<span style={{ fontFamily:"Rajdhani", fontWeight:700, color:COLORS.accent, fontSize:14 }}>#{h.numero}</span>}
+                    {h.signatura&&<span className="badge" style={{ background:"rgba(0,230,118,.15)", color:COLORS.green }}>✅ Signat</span>}
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:600 }}>{h.client||"Sense client"}</div>
+                  <div style={{ fontSize:11, color:COLORS.muted }}>{h.data}{h.poblacio?` · ${h.poblacio}`:""}</div>
+                </div>
+                <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>{ setEditantFull(h); setMostrarFormFull(true); }}>
+                  ✏ Editar
+                </button>
+              </div>
+            ))
+          }
+        </div>
+
         {/* HISTORIAL */}
         <div className="card" style={{ padding:20 }}>
           <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Els meus últims dies</div>
@@ -1085,7 +1210,22 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos }) {
             })}
         </div>
       </div>
+
       {encargoSeleccionado&&<GestionarEncargo encargo={encargoSeleccionado} onClose={()=>setEncargoSeleccionado(null)} />}
+
+      {/* MODAL FULL DE TREBALL */}
+      {mostrarFormFull&&(
+        <Modal title={editantFull?`Editar full #${editantFull.numero||""}`:"Nou full de treball"} onClose={()=>setMostrarFormFull(false)} extraWide>
+          <FormHojaTreball
+            hoja={editantFull}
+            onClose={()=>setMostrarFormFull(false)}
+            trabajadores={[{id:"w", nombre:usuarioInfo.nombre, estado:"Activo"}]}
+            encargos={encargos}
+            materialsHistorial={materialsHistorial}
+            isWorker={usuarioInfo.nombre}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1728,7 +1868,62 @@ function Manuales({ onManualesChange }) {
   );
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+// ─── NOTIFICACIONS ADMIN ─────────────────────────────────────────────────────
+function NotificacionsAdmin() {
+  const [notifs, setNotifs] = useState([]);
+  const [obert, setObert] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db,"notificacions"), orderBy("createdAt","desc"));
+    return onSnapshot(q, snap => setNotifs(snap.docs.map(d=>({id:d.id,...d.data()}))));
+  }, []);
+
+  const nollegides = notifs.filter(n=>!n.llegida).length;
+
+  const marcarLlegida = async (id) => {
+    await updateDoc(doc(db,"notificacions",id), { llegida: true });
+  };
+
+  const marcarTotes = async () => {
+    for (const n of notifs.filter(n=>!n.llegida)) {
+      await updateDoc(doc(db,"notificacions",n.id), { llegida: true });
+    }
+  };
+
+  return (
+    <div style={{ position:"relative", display:"inline-block" }}>
+      <button onClick={()=>setObert(o=>!o)} style={{ background:"transparent", border:"none", cursor:"pointer", position:"relative", padding:"6px 10px" }}>
+        <span style={{ fontSize:22 }}>🔔</span>
+        {nollegides>0&&<span style={{ position:"absolute", top:0, right:0, background:COLORS.danger, color:"#fff", borderRadius:"50%", fontSize:10, fontWeight:700, width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{nollegides}</span>}
+      </button>
+      {obert&&(
+        <div style={{ position:"absolute", right:0, top:"110%", width:340, background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12, zIndex:100, boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"hidden" }}>
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:15 }}>Notificacions</span>
+            {nollegides>0&&<button className="btn btn-ghost" style={{ fontSize:11, padding:"3px 8px" }} onClick={marcarTotes}>Marcar totes</button>}
+          </div>
+          <div style={{ maxHeight:320, overflowY:"auto" }}>
+            {notifs.length===0
+              ? <div style={{ padding:24, textAlign:"center", color:COLORS.muted, fontSize:13 }}>Sense notificacions</div>
+              : notifs.slice(0,20).map(n=>(
+                <div key={n.id} onClick={()=>marcarLlegida(n.id)} style={{ padding:"12px 16px", borderBottom:`1px solid ${COLORS.border}`, cursor:"pointer", background:n.llegida?"transparent":"rgba(0,196,255,.05)", display:"flex", gap:10, alignItems:"flex-start" }}>
+                  <span style={{ fontSize:18, flexShrink:0 }}>{n.tipus==="full_enviat"?"📋":"🔔"}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, color:n.llegida?COLORS.muted:COLORS.text }}>{n.missatge}</div>
+                    <div style={{ fontSize:11, color:COLORS.muted, marginTop:3 }}>{n.createdAt?.slice(0,16).replace("T"," ")}</div>
+                  </div>
+                  {!n.llegida&&<span style={{ width:8, height:8, borderRadius:"50%", background:COLORS.accent, flexShrink:0, marginTop:5 }}></span>}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
@@ -1845,6 +2040,7 @@ export default function App() {
           <div style={{padding:"0 16px 20px",borderBottom:`1px solid ${COLORS.border}`,textAlign:"center"}}>
             <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:36, maxWidth:"100%" }} />
             <div style={{fontSize:10,color:COLORS.muted,marginTop:6}}>👑 {usuarioInfo?.nombre||"Admin"}</div>
+            <div style={{marginTop:8}}><NotificacionsAdmin /></div>
           </div>
           <nav style={{padding:"12px 0",flex:1}}>
             {NAV_ITEMS.map(item=>(
