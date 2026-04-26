@@ -398,7 +398,7 @@ function Login() {
 // ─── MODAL ───────────────────────────────────────────────────────────────────
 function Modal({ title, onClose, children, wide, extraWide }) {
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.75)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}>
       <div className="card" style={{ width:"100%", maxWidth: extraWide?900:wide?720:540, padding:24, margin:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
