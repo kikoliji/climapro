@@ -1165,7 +1165,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
   }, []);
 
   useEffect(() => {
-    if (usuarioUid) registrarTokenFCM(usuarioUid);
+    if (usuarioUid) registrarTokenFCM(usuarioUid).catch(() => {});
   }, [usuarioUid]);
 
   const misFichajesHoy = fichajes.filter(f=>f.trabajador===usuarioInfo.nombre&&f.fecha===hoy).sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||""));

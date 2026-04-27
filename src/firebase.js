@@ -19,6 +19,7 @@ export const auth = getAuth(app);
 const messaging = getMessaging(app);
 
 export async function registrarTokenFCM(uid) {
+  if (window.location.protocol !== "https:") return;
   try {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return;
