@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { db, auth, registrarTokenFCM } from "./firebase";
+import { db, auth } from "./firebase";
 import {
   collection, addDoc, onSnapshot, orderBy, query,
   deleteDoc, doc, updateDoc, setDoc, getDoc, runTransaction
@@ -1165,7 +1165,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
   }, []);
 
   useEffect(() => {
-    if (usuarioUid) registrarTokenFCM(usuarioUid).catch(() => {});
+    // registrarTokenFCM desactivat fins HTTPS
   }, [usuarioUid]);
 
   const misFichajesHoy = fichajes.filter(f=>f.trabajador===usuarioInfo.nombre&&f.fecha===hoy).sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||""));
