@@ -371,6 +371,19 @@ async function generarNumeroAlbara() {
   return `ALB-${any}-${String(num).padStart(4, "0")}`;
 }
 
+async function generarNumeroFullTreball() {
+  const comptadorRef = doc(db, "contadors", "hojesTreball");
+  const any = new Date().getFullYear();
+  let num;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(comptadorRef);
+    const ultim = snap.exists() ? (snap.data().ultim || 0) : 0;
+    num = ultim + 1;
+    transaction.set(comptadorRef, { ultim: num }, { merge: true });
+  });
+  return `FT-${any}-${String(num).padStart(4, "0")}`;
+}
+
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function Login() {
   const [email, setEmail] = useState("");
@@ -566,6 +579,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     if (hojaId) {
       await updateDoc(doc(db,"hojesTreball",hojaId), dades);
     } else {
+      dades.numero = await generarNumeroFullTreball();
       const ref = await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: new Date().toISOString() });
       hojaId = ref.id;
       // Crear albarà automàtic
