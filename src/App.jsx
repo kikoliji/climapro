@@ -626,12 +626,87 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const enviarPerCorreu = async () => {
     if (!form.email) { alert("Afegeix l'email del client al formulari"); return; }
     setGenerant(true);
-    const pdf = await generarPDFHojaTreball(form);
-    pdf.save(`full_treball_${form.numero||"nou"}_${form.client||"client"}.pdf`);
-    const subject = encodeURIComponent(`Full de treball${form.numero ? ` #${form.numero}` : ""} - Nouaire`);
-    const body = encodeURIComponent(`Bona dia,\n\nAdjuntem el full de treball${form.numero ? ` #${form.numero}` : ""}${form.data ? ` del dia ${form.data}` : ""}.\n\nSi teniu qualsevol dubte, no dubteu en contactar-nos.\n\nNouaire\nTel. ${EMPRESA.telefon}\n${EMPRESA.email}`);
-    window.open(`mailto:${form.email}?subject=${subject}&body=${body}`);
-    setGenerant(false);
+    try {
+      const pdf = await generarPDFHojaTreball(form);
+      const pdfBase64 = pdf.output("datauristring").split(",")[1];
+      const filename = `full-${form.numero || "nou"}.pdf`;
+      const subject = `Full de treball #${form.numero || ""} - ${form.client || ""}`;
+      const bodyText = "Benvolgut/da, us adjuntem el full de treball. Gràcies.";
+
+      // Build RFC 2822 MIME multipart message
+      const encSubject = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+      const encBody = btoa(unescape(encodeURIComponent(bodyText)));
+      const boundary = `=_Part_${Date.now()}`;
+      const pdfLines = (pdfBase64.match(/.{1,76}/g) || [pdfBase64]).join("\r\n");
+      const mime = [
+        "MIME-Version: 1.0",
+        `To: ${form.email}`,
+        `Subject: ${encSubject}`,
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        "",
+        `--${boundary}`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        "Content-Transfer-Encoding: base64",
+        "",
+        encBody,
+        "",
+        `--${boundary}`,
+        `Content-Type: application/pdf; name="${filename}"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-Disposition: attachment; filename="${filename}"`,
+        "",
+        pdfLines,
+        "",
+        `--${boundary}--`,
+      ].join("\r\n");
+
+      // Base64url encode the full MIME message for Gmail API
+      const msgBytes = new TextEncoder().encode(mime);
+      let binary = "";
+      for (let i = 0; i < msgBytes.length; i += 4096) {
+        binary += String.fromCharCode(...msgBytes.subarray(i, i + 4096));
+      }
+      const raw = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+      // OAuth2 token + Gmail API send
+      if (!window.google?.accounts?.oauth2) throw new Error("Google Identity Services no disponible");
+      await new Promise((resolve, reject) => {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          scope: "https://www.googleapis.com/auth/gmail.send",
+          callback: async (tokenResp) => {
+            if (tokenResp.error) { reject(new Error(tokenResp.error)); return; }
+            try {
+              const res = await fetch(
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${tokenResp.access_token}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ raw }),
+                }
+              );
+              if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                reject(new Error(errData.error?.message || `Gmail API error ${res.status}`));
+              } else {
+                resolve();
+              }
+            } catch (e) { reject(e); }
+          },
+        });
+        client.requestAccessToken({ prompt: "" });
+      });
+
+      alert(`Correu enviat correctament a ${form.email}`);
+    } catch (err) {
+      console.error("[Gmail] Error enviant correu:", err);
+      alert(`Error enviant el correu: ${err.message}`);
+    } finally {
+      setGenerant(false);
+    }
   };
 
   // Omplir des d'encàrrec
