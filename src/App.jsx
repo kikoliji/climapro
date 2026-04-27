@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged
+  signOut, onAuthStateChanged, deleteUser
 } from "firebase/auth";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -1115,6 +1115,8 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
   const colorEstado = {"Pendent":COLORS.yellow,"En curs":COLORS.accent,"Completat":COLORS.green};
 
   return (
+    <>
+    <style>{STYLE}</style>
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
       <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}`, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:32 }} />
@@ -1256,6 +1258,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
         </Modal>
       )}
     </div>
+    </>
   );
 }
 
@@ -1272,13 +1275,38 @@ function GestionUsuarios({ trabajadores }) {
   const crearUsuario = async () => {
     if (!form.email||!form.password||!form.nombre) return;
     setGuardando(true); setError("");
+
+    let cred;
     try {
-      const cred = await createUserWithEmailAndPassword(auth,form.email,form.password);
-      const dades = { email:form.email, nombre:form.nombre, rol:form.rol };
-      if (form.rol === "secretaria") dades.seccionsPermeses = form.seccionsPermeses;
-      await setDoc(doc(db,"usuarios",cred.user.uid), dades);
-      setModal(false); setForm({ email:"", password:"", nombre:"", rol:"trabajador", seccionsPermeses:[] });
-    } catch(e){ setError(e.code==="auth/email-already-in-use"?"Aquest email ja existeix":"Error en crear l'usuari"); }
+      cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+    } catch(e) {
+      setError(
+        e.code === "auth/email-already-in-use" ? "Aquest email ja existeix" :
+        e.code === "auth/weak-password" ? "La contrasenya ha de tenir mínim 6 caràcters" :
+        `Error d'autenticació: ${e.code}`
+      );
+      setGuardando(false);
+      return;
+    }
+
+    const rol = form.rol.trim().toLowerCase();
+    const dades = { email: form.email, nombre: form.nombre, rol };
+    if (rol === "secretaria") dades.seccionsPermeses = form.seccionsPermeses;
+
+    for (let intent = 1; intent <= 3; intent++) {
+      try {
+        await setDoc(doc(db, "usuarios", cred.user.uid), dades);
+        setModal(false);
+        setForm({ email:"", password:"", nombre:"", rol:"trabajador", seccionsPermeses:[] });
+        setGuardando(false);
+        return;
+      } catch(_) {
+        if (intent < 3) await new Promise(r => setTimeout(r, 500 * intent));
+      }
+    }
+
+    try { await deleteUser(cred.user); } catch(_) {}
+    setError("Usuari creat a Auth però no s'ha pogut desar a Firestore (3 intents fallits). El compte ha estat eliminat. Contacta amb suport.");
     setGuardando(false);
   };
 
@@ -2110,6 +2138,7 @@ export default function App() {
   const [usuario, setUsuario] = useState(null);
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [cargandoAuth, setCargandoAuth] = useState(true);
+  const [cuentaSinConfigurar, setCuentaSinConfigurar] = useState(false);
   const [section, setSection] = useState("dashboard");
   const [manuales, setManuales] = useState([]);
   const [fichajes, setFichajes] = useState([]);
@@ -2119,7 +2148,7 @@ export default function App() {
   const [hojesTreball, setHojesTreball] = useState([]);
   const [cargandoT, setCargandoT] = useState(true);
 
-  useEffect(()=>{ return onAuthStateChanged(auth,async(u)=>{ if(u){setUsuario(u);const snap=await getDoc(doc(db,"usuarios",u.uid));if(snap.exists())setUsuarioInfo(snap.data());}else{setUsuario(null);setUsuarioInfo(null);}setCargandoAuth(false); }); },[]);
+  useEffect(()=>{ return onAuthStateChanged(auth,async(u)=>{ if(u){setUsuario(u);setCuentaSinConfigurar(false);const snap=await getDoc(doc(db,"usuarios",u.uid));if(snap.exists()){setUsuarioInfo(snap.data());}else{console.warn('[Auth] Usuari autenticat sense document a Firestore "usuarios". UID:',u.uid);setCuentaSinConfigurar(true);}}else{setUsuario(null);setUsuarioInfo(null);setCuentaSinConfigurar(false);}setCargandoAuth(false); }); },[]);
   useEffect(()=>{ const q=query(collection(db,"fichajes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setFichajes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
   useEffect(()=>{ const q=query(collection(db,"trabajadores"),orderBy("nombre")); return onSnapshot(q,snap=>{setTrabajadores(snap.docs.map(d=>({id:d.id,...d.data()})));setCargandoT(false);}); },[]);
   useEffect(()=>{ const q=query(collection(db,"encargos"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
@@ -2128,6 +2157,14 @@ export default function App() {
 
   if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"Inter"}}>Carregant...</div>;
   if(!usuario) return <Login />;
+  if(cuentaSinConfigurar) return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,fontFamily:"Inter",flexDirection:"column",gap:16}}>
+      <div style={{fontSize:48}}>⚠️</div>
+      <div style={{fontSize:18,fontWeight:700,color:COLORS.text}}>Compte sense configurar</div>
+      <div style={{fontSize:14,color:COLORS.muted,textAlign:"center",maxWidth:340}}>El teu compte no té accés configurat. Contacta amb l'administrador.</div>
+      <button className="btn btn-danger" onClick={()=>signOut(auth)}>Tancar sessió</button>
+    </div>
+  );
   if(usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} />;
   if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} onManualesChange={setManuales} />;
 
