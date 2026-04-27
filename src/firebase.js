@@ -16,11 +16,11 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-const messaging = getMessaging(app);
-
 export async function registrarTokenFCM(uid) {
   if (window.location.protocol !== "https:") return;
+  if (!("serviceWorker" in navigator)) return;
   try {
+    const messaging = getMessaging(app);
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return;
     const token = await getToken(messaging, {
