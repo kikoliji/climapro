@@ -542,7 +542,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     signatura: null, estat: "Pendent", encargoId: "", email: "",
   };
 
-  const [form, setForm] = useState(hoja ? { ...emptyForm, ...hoja, materials: hoja.materials || [], operaris: hoja.operaris || [] } : emptyForm);
+  const [form, setForm] = useState(hoja ? { ...emptyForm, ...hoja, materials: Array.isArray(hoja.materials) ? hoja.materials : [], operaris: Array.isArray(hoja.operaris) ? hoja.operaris : (hoja.operaris ? [hoja.operaris] : []) } : emptyForm);
   const [guardando, setGuardando] = useState(false);
   const [mostrarSignatura, setMostrarSignatura] = useState(false);
   const [generant, setGenerant] = useState(false);
@@ -568,7 +568,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const eliminarMaterial = (i) => setForm(f => ({ ...f, materials: (f.materials||[]).filter((_,j)=>j!==i) }));
 
   const toggleOperari = (nom) => {
-    const actual = form.operaris || [];
+    const actual = Array.isArray(form.operaris) ? form.operaris : [];
     setForm({ ...form, operaris: actual.includes(nom) ? actual.filter(n=>n!==nom) : [...actual, nom] });
   };
 
@@ -1704,7 +1704,7 @@ function Encargos({ trabajadores }) {
   const cambiarEstado=async(id,estado)=>{ const ahora=new Date().toISOString().split("T")[0]; await updateDoc(doc(db,"encargos",id),{estado,fechaCompletado:estado==="Completat"?ahora:null}); };
   const archivar=async(id,archivado)=>{await updateDoc(doc(db,"encargos",id),{archivado});};
   const archivarTodosCompletados=async()=>{ const c=encargos.filter(e=>e.estado==="Completat"&&!e.archivado); for(const e of c)await updateDoc(doc(db,"encargos",e.id),{archivado:true}); };
-  const toggleAsignado=(nom)=>{ const actual=form.asignados||[]; setForm({...form,asignados:actual.includes(nom)?actual.filter(n=>n!==nom):[...actual,nom]}); };
+  const toggleAsignado=(nom)=>{ const actual=Array.isArray(form.asignados)?form.asignados:[]; setForm({...form,asignados:actual.includes(nom)?actual.filter(n=>n!==nom):[...actual,nom]}); };
 
   const importarSmartsheet=async(archivo)=>{
     setImportando(true);setResultadoImport(null);
