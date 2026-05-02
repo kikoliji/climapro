@@ -670,6 +670,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
 
       // OAuth2 token + Gmail API send
       if (!window.google?.accounts?.oauth2) throw new Error("Google Identity Services no disponible");
+      console.log('client_id value:', import.meta.env.VITE_GOOGLE_CLIENT_ID);
       await new Promise((resolve, reject) => {
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -945,7 +946,7 @@ function HojesTreball({ trabajadores, encargos }) {
                     </div>
                     <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{h.client || "Sense client"}</div>
                     <div style={{ fontSize:12, color:COLORS.muted }}>
-                      {h.data}{h.poblacio ? ` · ${h.poblacio}` : ""}{h.operaris?.length > 0 ? ` · 👷 ${h.operaris.join(", ")}` : ""}
+                      {h.data}{h.poblacio ? ` · ${h.poblacio}` : ""}{Array.isArray(h.operaris) && h.operaris.length > 0 ? ` · 👷 ${h.operaris.join(", ")}` : ""}
                     </div>
                     {h.total && <div style={{ fontSize:13, color:COLORS.green, marginTop:4, fontFamily:"Rajdhani", fontWeight:700 }}>TOTAL: {h.total}€</div>}
                     {h.descripcio && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4, fontStyle:"italic" }}>"{h.descripcio.substring(0,80)}{h.descripcio.length>80?"...":""}"</div>}
@@ -1155,7 +1156,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
 
   useEffect(() => {
     const q = query(collection(db,"hojesTreball"), orderBy("createdAt","desc"));
-    return onSnapshot(q, snap => setMevesFulles(snap.docs.map(d=>({id:d.id,...d.data()})).filter(h=>(h.operaris||[]).includes(usuarioInfo.nombre))));
+    return onSnapshot(q, snap => setMevesFulles(snap.docs.map(d=>({id:d.id,...d.data()})).filter(h=>(Array.isArray(h.operaris)?h.operaris:[]).includes(usuarioInfo.nombre))));
   }, [usuarioInfo.nombre]);
 
   useEffect(() => {
