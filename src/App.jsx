@@ -2221,7 +2221,7 @@ const NAV_ITEMS = [
   {id:"encargos",label:"Encàrrecs",icon:"🔧"},
   {id:"hojesTreball",label:"Fulls de Treball",icon:"📋"},
   {id:"albaranes",label:"Albarans",icon:"📄"},
-  {id:"manuales",label:"Manuals",icon:"📚"},
+  {id:"manuales",label:"Manuals",icon:"📚",adminUrl:"http://192.168.1.75:8080"},
 ];
 
 export default function App() {
@@ -2270,7 +2270,7 @@ export default function App() {
           </div>
           <nav style={{padding:"12px 0",flex:1}}>
             {NAV_ITEMS.map(item=>(
-              <button key={item.id} onClick={()=>setSection(item.id)}
+              <button key={item.id} onClick={()=>item.adminUrl ? window.open(item.adminUrl,"_blank") : setSection(item.id)}
                 style={{width:"100%",background:section===item.id?COLORS.accentGlow:"transparent",
                   borderLeft:section===item.id?`3px solid ${COLORS.accent}`:"3px solid transparent",
                   color:section===item.id?COLORS.accent:COLORS.muted,
@@ -2278,6 +2278,7 @@ export default function App() {
                   fontSize:12,fontFamily:"Inter",fontWeight:section===item.id?600:400,
                   display:"flex",alignItems:"center",gap:8,transition:"all .15s"}}>
                 <span>{item.icon}</span>{item.label}
+                {item.adminUrl && <span style={{marginLeft:"auto",fontSize:10,opacity:0.5}}>↗</span>}
                 {item.id==="hojesTreball" && hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length>0 && (
                   <span style={{marginLeft:"auto",background:COLORS.yellow,color:"#000",fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px"}}>
                     {hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length}
@@ -2298,7 +2299,6 @@ export default function App() {
           {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
           {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
           {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
-          {section==="manuales"&&<Manuales onManualesChange={setManuales}/>}
         </div>
       </div>
     </>
