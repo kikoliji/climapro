@@ -1157,6 +1157,178 @@ function ResumSetmanal({ nom, fichajes }) {
   );
 }
 
+// ─── RESUM HORES DETALLAT ─────────────────────────────────────────────────────
+function ResumHoresDetallat({ nom, mevesFulles }) {
+  const [tab, setTab] = useState("setmana");
+
+  const DIES_CA = ["Diumenge","Dilluns","Dimarts","Dimecres","Dijous","Divendres","Dissabte"];
+  const MESOS_CA = ["Gener","Febrer","Març","Abril","Maig","Juny","Juliol","Agost","Setembre","Octubre","Novembre","Desembre"];
+
+  const parseH = (v) => parseFloat(String(v||0).replace(",",".")) || 0;
+
+  const avui = new Date();
+  const avuiStr = avui.toISOString().split("T")[0];
+  const mesStr  = avuiStr.slice(0,7);
+  const anyStr  = avuiStr.slice(0,4);
+
+  const getLunes = (d) => {
+    const r = new Date(typeof d==="string" ? d+"T00:00:00" : d);
+    const day = r.getDay();
+    r.setDate(r.getDate()-(day===0?6:day-1));
+    return r.toISOString().split("T")[0];
+  };
+  const lunesStr = getLunes(avui);
+  const diumenge = (() => { const r=new Date(lunesStr+"T00:00:00"); r.setDate(r.getDate()+6); return r.toISOString().split("T")[0]; })();
+
+  const fullsSetmana = mevesFulles.filter(h=>h.data>=lunesStr&&h.data<=diumenge);
+  const fullsMes     = mevesFulles.filter(h=>(h.data||"").startsWith(mesStr));
+  const fullsAny     = mevesFulles.filter(h=>(h.data||"").startsWith(anyStr));
+
+  const horesSetmana = fullsSetmana.reduce((s,h)=>s+parseH(h.horesOperari),0);
+  const horesMes     = fullsMes.reduce((s,h)=>s+parseH(h.horesOperari),0);
+  const horesAny     = fullsAny.reduce((s,h)=>s+parseH(h.horesOperari),0);
+
+  const formatDia = (ds) => { const d=new Date(ds+"T00:00:00"); return `${DIES_CA[d.getDay()]} ${d.getDate()} ${MESOS_CA[d.getMonth()]}`; };
+  const monthName = (ms) => { const [,m]=ms.split("-"); return `${MESOS_CA[parseInt(m)-1]} ${ms.slice(0,4)}`; };
+  const weekEnd   = (ws) => { const r=new Date(ws+"T00:00:00"); r.setDate(r.getDate()+6); return r.toISOString().split("T")[0]; };
+
+  const groupBy = (fulls, keyFn) => {
+    const g={};
+    fulls.forEach(h=>{ const k=keyFn(h); if(!g[k])g[k]=[]; g[k].push(h); });
+    return Object.entries(g).sort((a,b)=>b[0].localeCompare(a[0]));
+  };
+
+  const TABS = [{id:"setmana",label:"Setmana"},{id:"mes",label:"Mes"},{id:"any",label:"Any"}];
+  const METRICS = [
+    {label:"Aquesta setmana", h:horesSetmana},
+    {label:"Aquest mes",      h:horesMes},
+    {label:"Aquest any",      h:horesAny},
+  ];
+
+  return (
+    <div className="card" style={{padding:20,marginBottom:20}}>
+      <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,fontWeight:400,marginBottom:14}}>Resum d'hores</div>
+
+      {/* MÈTRIQUES */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+        {METRICS.map(m=>(
+          <div key={m.label} style={{background:COLORS.bg,borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:24,color:COLORS.accent,lineHeight:1}}>{m.h}h</div>
+            <div style={{fontSize:10,color:COLORS.muted,marginTop:5,textTransform:"uppercase",letterSpacing:"0.5px",fontWeight:500}}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* PESTANYES */}
+      <div style={{display:"flex",gap:4,marginBottom:16}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            padding:"5px 16px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:500,
+            fontFamily:"'DM Sans',sans-serif",transition:"all .15s",
+            background:tab===t.id?COLORS.accent:"transparent",
+            color:tab===t.id?"#fff":COLORS.muted
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* SETMANA */}
+      {tab==="setmana"&&(
+        fullsSetmana.length===0
+          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense hojes aquesta setmana</div>
+          : <>
+              {groupBy(fullsSetmana,h=>h.data).map(([dia,fulls])=>{
+                const totalDia=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
+                return (
+                  <div key={dia} style={{background:COLORS.bg,borderRadius:12,padding:14,marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <span style={{fontWeight:600,fontSize:13,color:COLORS.text}}>{formatDia(dia)}</span>
+                      <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20}}>{totalDia}h</span>
+                    </div>
+                    {fulls.map(h=>(
+                      <div key={h.id} style={{padding:"8px 0",borderTop:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:13,fontWeight:500}}>{h.client||"Sense client"}</div>
+                          <div style={{marginTop:2}}>
+                            {h.numero&&<span style={{fontSize:11,color:COLORS.accent,marginRight:6}}>#{h.numero}</span>}
+                            {h.descripcio&&<span style={{fontSize:11,color:COLORS.muted}}>{h.descripcio.substring(0,70)}{h.descripcio.length>70?"…":""}</span>}
+                          </div>
+                        </div>
+                        <span style={{fontSize:13,fontWeight:600,color:COLORS.accent,whiteSpace:"nowrap"}}>{parseH(h.horesOperari)>0?`${parseH(h.horesOperari)}h`:"—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:6,paddingTop:12,borderTop:`1px solid ${COLORS.border}`}}>
+                <span style={{fontSize:12,color:COLORS.muted}}>Total setmana</span>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:24,color:COLORS.accent}}>{horesSetmana}h</span>
+              </div>
+            </>
+      )}
+
+      {/* MES */}
+      {tab==="mes"&&(
+        fullsMes.length===0
+          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense hojes aquest mes</div>
+          : <>
+              {groupBy(fullsMes,h=>getLunes(h.data)).map(([ws,fulls])=>{
+                const we=weekEnd(ws);
+                const totalS=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
+                return (
+                  <div key={ws} style={{background:COLORS.bg,borderRadius:12,padding:14,marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <span style={{fontWeight:600,fontSize:13}}>
+                        {ws.slice(8)} – {we.slice(8)} {MESOS_CA[parseInt(mesStr.slice(5))-1]}
+                      </span>
+                      <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20}}>{totalS}h</span>
+                    </div>
+                    {fulls.sort((a,b)=>(a.data||"").localeCompare(b.data||"")).map(h=>(
+                      <div key={h.id} style={{padding:"6px 0",borderTop:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                        <div style={{flex:1}}>
+                          <span style={{fontSize:11,color:COLORS.muted,marginRight:6}}>{h.data?.slice(8)}·</span>
+                          <span style={{fontSize:13,fontWeight:500}}>{h.client||"Sense client"}</span>
+                          {h.numero&&<span style={{fontSize:11,color:COLORS.accent,marginLeft:6}}>#{h.numero}</span>}
+                        </div>
+                        <span style={{fontSize:13,fontWeight:600,color:COLORS.accent}}>{parseH(h.horesOperari)>0?`${parseH(h.horesOperari)}h`:"—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:6,paddingTop:12,borderTop:`1px solid ${COLORS.border}`}}>
+                <span style={{fontSize:12,color:COLORS.muted}}>Total mes</span>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:24,color:COLORS.accent}}>{horesMes}h</span>
+              </div>
+            </>
+      )}
+
+      {/* ANY */}
+      {tab==="any"&&(
+        fullsAny.length===0
+          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense hojes aquest any</div>
+          : <>
+              {groupBy(fullsAny,h=>(h.data||"").slice(0,7)).map(([ms,fulls])=>{
+                const totalM=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
+                return (
+                  <div key={ms} style={{background:COLORS.bg,borderRadius:12,padding:14,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <span style={{fontWeight:600,fontSize:13}}>{monthName(ms)}</span>
+                      <span style={{fontSize:11,color:COLORS.muted,marginLeft:10}}>{fulls.length} full{fulls.length!==1?"s":""}</span>
+                    </div>
+                    <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:12,fontWeight:600,padding:"4px 12px",borderRadius:20}}>{totalM}h</span>
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:6,paddingTop:12,borderTop:`1px solid ${COLORS.border}`}}>
+                <span style={{fontSize:12,color:COLORS.muted}}>Total any</span>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:24,color:COLORS.accent}}>{horesAny}h</span>
+              </div>
+            </>
+      )}
+    </div>
+  );
+}
+
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
 function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
   const [fichando, setFichando] = useState(false);
@@ -1236,6 +1408,9 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
 
         {/* RESUM SETMANAL */}
         <ResumSetmanal nom={usuarioInfo.nombre} fichajes={fichajes} />
+
+        {/* RESUM HORES DETALLAT */}
+        <ResumHoresDetallat nom={usuarioInfo.nombre} mevesFulles={mevesFulles} />
 
         {/* FICHAR */}
         <div className="card" style={{ padding:24, marginBottom:20, borderTop:`3px solid ${COLORS.accent}` }}>
