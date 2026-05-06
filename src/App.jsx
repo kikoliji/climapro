@@ -14,10 +14,13 @@ import axios from "axios";
 import * as XLSX from "xlsx";
 
 const COLORS = {
-  bg: "#0f1117", surface: "#1a1d27", card: "#1e2130", border: "#2a2d3e",
-  accent: "#00c4ff", accentDim: "#0099cc", accentGlow: "rgba(0,196,255,0.15)",
-  warm: "#ff6b35", green: "#00e676", yellow: "#ffd600",
-  text: "#e8eaf0", muted: "#8b8fa8", danger: "#ff4757",
+  bg: "#F7F5F0", surface: "#FFFFFF", card: "#FFFFFF", border: "#E8E6E0",
+  accent: "#2D6A4F", accentDim: "#245A42", accentGlow: "rgba(45,106,79,0.10)",
+  accentLight: "#E8F4EE",
+  warm: "#C8601A", warmLight: "#FFF0E6",
+  green: "#16A34A", yellow: "#D97706",
+  text: "#1A1A18", muted: "#888880", danger: "#C8601A",
+  blue: "#2952A3", blueLight: "#EBF0FB",
 };
 
 const CLOUDINARY_CLOUD = "dekjrcfef";
@@ -35,31 +38,35 @@ const EMPRESA = {
 };
 
 const STYLE = `
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: ${COLORS.bg}; color: ${COLORS.text}; font-family: 'Inter', sans-serif; }
+  body { background: ${COLORS.bg}; color: ${COLORS.text}; font-family: 'DM Sans', sans-serif; }
   ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: ${COLORS.bg}; }
   ::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 3px; }
-  .badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:.5px; }
-  .btn { cursor:pointer; border:none; font-family:'Inter',sans-serif; font-size:13px; font-weight:500; border-radius:8px; padding:8px 16px; transition:all .2s; }
-  .btn-primary { background:${COLORS.accent}; color:#000; }
-  .btn-primary:hover { background:${COLORS.accentDim}; transform:translateY(-1px); }
+  .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; letter-spacing:.3px; }
+  .btn { cursor:pointer; border:none; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; border-radius:8px; padding:8px 16px; transition:all .2s; }
+  .btn-primary { background:${COLORS.accent}; color:#fff; }
+  .btn-primary:hover { background:${COLORS.accentDim}; transform:translateY(-1px); box-shadow:0 4px 14px rgba(45,106,79,0.3); }
   .btn-ghost { background:transparent; color:${COLORS.muted}; border:1px solid ${COLORS.border}; }
   .btn-ghost:hover { border-color:${COLORS.accent}; color:${COLORS.accent}; }
-  .btn-danger { background:transparent; color:${COLORS.danger}; border:1px solid ${COLORS.danger}33; font-size:12px; padding:5px 10px; }
-  .btn-danger:hover { background:${COLORS.danger}22; }
-  .input { background:${COLORS.surface}; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:9px 13px; font-size:13px; font-family:'Inter',sans-serif; width:100%; outline:none; transition:border .2s; }
-  .input:focus { border-color:${COLORS.accent}; }
-  .select { background:${COLORS.surface}; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:9px 13px; font-size:13px; font-family:'Inter',sans-serif; outline:none; cursor:pointer; }
-  .card { background:${COLORS.card}; border:1px solid ${COLORS.border}; border-radius:14px; }
-  .card:hover { border-color:rgba(0,196,255,0.25); }
-  label { font-size:12px; color:${COLORS.muted}; font-weight:500; letter-spacing:.5px; text-transform:uppercase; display:block; margin-bottom:5px; }
-  .folder-row { display:flex; align-items:center; gap:10; padding:12px 16px; cursor:pointer; border-radius:10px; transition:background .15s; }
-  .folder-row:hover { background:rgba(0,196,255,0.07); }
-  tr:hover td { background:rgba(255,255,255,0.02); }
+  .btn-danger { background:transparent; color:${COLORS.danger}; border:1px solid rgba(200,96,26,0.25); font-size:12px; padding:5px 10px; }
+  .btn-danger:hover { background:rgba(200,96,26,0.08); }
+  .input { background:#fff; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:10px 13px; font-size:13px; font-family:'DM Sans',sans-serif; width:100%; outline:none; transition:border .2s,box-shadow .2s; }
+  .input:focus { border-color:${COLORS.accent}; box-shadow:0 0 0 3px rgba(45,106,79,0.08); }
+  .select { background:#fff; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:10px 13px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; cursor:pointer; }
+  .card { background:#fff; border:1px solid ${COLORS.border}; border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,0.04); transition:box-shadow .2s; }
+  .card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.08); }
+  label { font-size:11px; color:${COLORS.muted}; font-weight:500; letter-spacing:.5px; text-transform:uppercase; display:block; margin-bottom:6px; }
+  .folder-row { display:flex; align-items:center; gap:10px; padding:12px 16px; cursor:pointer; border-radius:10px; transition:background .15s; }
+  .folder-row:hover { background:rgba(45,106,79,0.06); }
+  tr:hover td { background:rgba(0,0,0,0.015); }
   .foto-thumb { cursor:pointer; transition:transform .15s; }
   .foto-thumb:hover { transform:scale(1.05); }
   .canvas-firma { touch-action: none; cursor: crosshair; }
+  .page-title { font-family:'DM Serif Display',serif; font-size:28px; font-weight:400; letter-spacing:-0.5px; color:${COLORS.text}; }
+  .section-title { font-family:'DM Serif Display',serif; font-size:20px; font-weight:400; color:${COLORS.text}; margin-bottom:4px; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  .fade-up { animation:fadeUp 0.35s ease both; }
 `;
 
 const ESTADOS_ALBARAN = ["Esborrany", "Enviat", "Cobrat", "Pendent"];
@@ -400,21 +407,29 @@ function Login() {
   };
 
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:COLORS.bg }}>
-      <div style={{ width:"100%", maxWidth:400, padding:24 }}>
-        <div style={{ textAlign:"center", marginBottom:40 }}>
-          <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:60, marginBottom:12 }} />
-          <div style={{ fontSize:13, color:COLORS.muted }}>Gestió d'empresa</div>
-        </div>
-        <div className="card" style={{ padding:28 }}>
+    <div style={{ minHeight:"100vh", display:"flex", background:COLORS.bg }}>
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div style={{ width:"100%", maxWidth:380 }}>
+          <div style={{ marginBottom:40 }}>
+            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:48, marginBottom:20 }} />
+            <h1 style={{ fontFamily:"'DM Serif Display',serif", fontSize:30, fontWeight:400, letterSpacing:"-0.5px", color:COLORS.text, marginBottom:6 }}>Benvingut</h1>
+            <p style={{ fontSize:14, color:COLORS.muted, fontWeight:300 }}>Accedeix al panell de gestió de Nouaire</p>
+          </div>
           <div style={{ display:"grid", gap:16 }}>
             <div><label>Email</label><input className="input" type="email" placeholder="tu@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
             <div><label>Contrasenya</label><input className="input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
-            {error && <div style={{ fontSize:13, color:COLORS.danger, textAlign:"center" }}>{error}</div>}
-            <button className="btn btn-primary" onClick={handleLogin} disabled={cargando} style={{ width:"100%", padding:12, fontSize:14 }}>
+            {error && <div style={{ fontSize:13, color:COLORS.danger, background:"#FEE2E2", padding:"10px 14px", borderRadius:8 }}>{error}</div>}
+            <button className="btn btn-primary" onClick={handleLogin} disabled={cargando} style={{ width:"100%", padding:"13px", fontSize:14, borderRadius:10, marginTop:4 }}>
               {cargando ? "Entrant..." : "Entrar"}
             </button>
           </div>
+        </div>
+      </div>
+      <div style={{ width:360, background:COLORS.accentLight, display:"flex", alignItems:"center", justifyContent:"center", padding:40 }}>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:64, marginBottom:20 }}>🌿</div>
+          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:COLORS.accent, marginBottom:10 }}>Nouaire</div>
+          <div style={{ fontSize:13, color:COLORS.accentDim, fontWeight:300, lineHeight:1.6 }}>{EMPRESA.adreca}<br/>{EMPRESA.telefon}</div>
         </div>
       </div>
     </div>
@@ -438,16 +453,15 @@ function Modal({ title, onClose, children, wide, extraWide }) {
 
 function EstadoBadge({ estado }) {
   const colors = {
-    Cobrat:{bg:"rgba(0,230,118,.15)",color:COLORS.green}, Enviat:{bg:"rgba(0,196,255,.15)",color:COLORS.accent},
-    Esborrany:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Pendent:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    "En curs":{bg:"rgba(0,196,255,.15)",color:COLORS.accent}, Completat:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
-    "Cancel·lat":{bg:"rgba(255,71,87,.15)",color:COLORS.danger}, Urgent:{bg:"rgba(255,71,87,.2)",color:COLORS.danger},
-    Alta:{bg:"rgba(255,107,53,.2)",color:COLORS.warm}, Mitjana:{bg:"rgba(255,214,0,.15)",color:COLORS.yellow},
-    Baixa:{bg:"rgba(139,143,168,.15)",color:COLORS.muted}, Actiu:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
-    Inactiu:{bg:"rgba(139,143,168,.15)",color:COLORS.muted},
-    Signat:{bg:"rgba(0,230,118,.15)",color:COLORS.green},
+    Cobrat:{bg:"#DCFCE7",color:"#16A34A"}, Enviat:{bg:"#DBEAFE",color:"#2952A3"},
+    Esborrany:{bg:"#F1F0EC",color:"#888880"}, Pendent:{bg:"#FEF9C3",color:"#A16207"},
+    "En curs":{bg:"#DBEAFE",color:"#2952A3"}, Completat:{bg:"#DCFCE7",color:"#16A34A"},
+    "Cancel·lat":{bg:"#FEE2E2",color:"#C8601A"}, Urgent:{bg:"#FEE2E2",color:"#C8601A"},
+    Alta:{bg:"#FFEDD5",color:"#C8601A"}, Mitjana:{bg:"#FEF9C3",color:"#A16207"},
+    Baixa:{bg:"#F1F0EC",color:"#888880"}, Actiu:{bg:"#DCFCE7",color:"#16A34A"},
+    Inactiu:{bg:"#F1F0EC",color:"#888880"}, Signat:{bg:"#DCFCE7",color:"#16A34A"},
   };
-  const c = colors[estado]||{bg:"rgba(139,143,168,.15)",color:COLORS.muted};
+  const c = colors[estado]||{bg:"#F1F0EC",color:"#888880"};
   return <span className="badge" style={{background:c.bg,color:c.color}}>{estado}</span>;
 }
 
@@ -1208,10 +1222,13 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
     <>
     <style>{STYLE}</style>
     <div style={{ minHeight:"100vh", background:COLORS.bg }}>
-      <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}`, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:32 }} />
+      <div style={{ background:"#fff", borderBottom:`1px solid ${COLORS.border}`, padding:"14px 24px", display:"flex", justifyContent:"space-between", alignItems:"center", position:"sticky", top:0, zIndex:50 }}>
+        <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:28 }} />
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <span style={{ fontSize:13, color:COLORS.muted }}>👷 {usuarioInfo.nombre}</span>
+          <div style={{ width:30,height:30,borderRadius:"50%",background:COLORS.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,color:COLORS.accent }}>
+            {usuarioInfo.nombre.charAt(0).toUpperCase()}
+          </div>
+          <span style={{ fontSize:13, color:COLORS.muted, fontWeight:400 }}>{usuarioInfo.nombre}</span>
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>signOut(auth)}>Sortir</button>
         </div>
       </div>
@@ -2066,16 +2083,16 @@ function NotificacionsAdmin() {
         {nollegides>0&&<span style={{ position:"absolute", top:0, right:0, background:COLORS.danger, color:"#fff", borderRadius:"50%", fontSize:10, fontWeight:700, width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{nollegides}</span>}
       </button>
       {obert&&(
-        <div style={{ position:"absolute", right:0, top:"110%", width:340, background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12, zIndex:100, boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"hidden" }}>
-          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <span style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:15 }}>Notificacions</span>
+        <div style={{ position:"absolute", right:0, top:"110%", width:340, background:"#fff", border:`1px solid ${COLORS.border}`, borderRadius:14, zIndex:100, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", overflow:"hidden" }}>
+          <div style={{ padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontFamily:"'DM Serif Display',serif", fontWeight:400, fontSize:17 }}>Notificacions</span>
             {nollegides>0&&<button className="btn btn-ghost" style={{ fontSize:11, padding:"3px 8px" }} onClick={marcarTotes}>Marcar totes</button>}
           </div>
           <div style={{ maxHeight:320, overflowY:"auto" }}>
             {notifs.length===0
               ? <div style={{ padding:24, textAlign:"center", color:COLORS.muted, fontSize:13 }}>Sense notificacions</div>
               : notifs.slice(0,20).map(n=>(
-                <div key={n.id} onClick={()=>marcarLlegida(n.id)} style={{ padding:"12px 16px", borderBottom:`1px solid ${COLORS.border}`, cursor:"pointer", background:n.llegida?"transparent":"rgba(0,196,255,.05)", display:"flex", gap:10, alignItems:"flex-start" }}>
+                <div key={n.id} onClick={()=>marcarLlegida(n.id)} style={{ padding:"12px 16px", borderBottom:`1px solid ${COLORS.border}`, cursor:"pointer", background:n.llegida?"transparent":COLORS.accentLight, display:"flex", gap:10, alignItems:"flex-start" }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>{n.tipus==="full_enviat"?"📋":"🔔"}</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, color:n.llegida?COLORS.muted:COLORS.text }}>{n.missatge}</div>
@@ -2099,41 +2116,64 @@ function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajado
   const navItems = NAV_ITEMS.filter(item => permes.includes(item.id));
   const [section, setSection] = useState(navItems[0]?.id || null);
 
+  const secLabel = NAV_ITEMS.find(i=>i.id===section)?.label || "";
   return (
     <>
       <style>{STYLE}</style>
       <div style={{display:"flex",minHeight:"100vh"}}>
-        <div style={{width:230,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,padding:"20px 0",display:"flex",flexDirection:"column",flexShrink:0}}>
-          <div style={{padding:"0 16px 20px",borderBottom:`1px solid ${COLORS.border}`,textAlign:"center"}}>
-            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:36, maxWidth:"100%" }} />
-            <div style={{fontSize:10,color:COLORS.muted,marginTop:6}}>📋 {usuarioInfo?.nombre||"Secretaria"}</div>
+        <div style={{width:220,background:"#fff",borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh"}}>
+          <div style={{padding:"28px 24px 20px",borderBottom:`1px solid ${COLORS.border}`}}>
+            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{height:30,maxWidth:"100%"}} />
+            <div style={{fontSize:10,color:COLORS.muted,marginTop:8,letterSpacing:"0.8px",textTransform:"uppercase",fontWeight:500}}>Espai de gestió</div>
           </div>
-          <nav style={{padding:"12px 0",flex:1}}>
+          <nav style={{padding:"16px 12px",flex:1,display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
             {navItems.map(item=>(
               <button key={item.id} onClick={()=>setSection(item.id)}
-                style={{width:"100%",background:section===item.id?COLORS.accentGlow:"transparent",
-                  borderLeft:section===item.id?`3px solid ${COLORS.accent}`:"3px solid transparent",
+                style={{width:"100%",background:section===item.id?COLORS.accentLight:"transparent",
+                  borderRadius:8,border:"none",
                   color:section===item.id?COLORS.accent:COLORS.muted,
-                  padding:"11px 16px",textAlign:"left",cursor:"pointer",border:"none",
-                  fontSize:12,fontFamily:"Inter",fontWeight:section===item.id?600:400,
-                  display:"flex",alignItems:"center",gap:8,transition:"all .15s"}}>
-                <span>{item.icon}</span>{item.label}
+                  padding:"10px 12px",textAlign:"left",cursor:"pointer",
+                  fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:section===item.id?500:400,
+                  display:"flex",alignItems:"center",gap:10,transition:"all .15s"}}>
+                <span style={{fontSize:14,width:18,textAlign:"center",opacity:0.7}}>{item.icon}</span>
+                {item.label}
               </button>
             ))}
           </nav>
-          <div style={{padding:"12px 16px",borderTop:`1px solid ${COLORS.border}`}}>
+          <div style={{padding:"16px 20px",borderTop:`1px solid ${COLORS.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:COLORS.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:600,color:COLORS.accent,flexShrink:0}}>
+                {(usuarioInfo?.nombre||"S").charAt(0).toUpperCase()}
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:500,color:COLORS.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{usuarioInfo?.nombre||"Secretaria"}</div>
+                <div style={{fontSize:11,color:COLORS.muted}}>Secretaria</div>
+              </div>
+            </div>
             <button className="btn btn-ghost" style={{width:"100%",fontSize:12}} onClick={()=>signOut(auth)}>Tancar sessió</button>
           </div>
         </div>
-        <div style={{flex:1,padding:28,overflowY:"auto",maxHeight:"100vh"}}>
-          {!section&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",color:COLORS.muted,fontSize:14}}>Sense seccions assignades</div>}
-          {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
-          {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={false}/>}
-          {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
-          {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
-          {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
-          {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
-          {section==="manuales"&&<Manuales onManualesChange={onManualesChange}/>}
+        <div style={{flex:1,overflowY:"auto",maxHeight:"100vh",background:COLORS.bg}}>
+          <div style={{padding:"36px 40px",maxWidth:1100}}>
+            {!section
+              ? <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",color:COLORS.muted,fontSize:14}}>Sense seccions assignades</div>
+              : <>
+                  <div style={{marginBottom:28}}>
+                    <h2 className="page-title">{secLabel}</h2>
+                    <div style={{fontSize:13,color:COLORS.muted,marginTop:4,fontWeight:300}}>
+                      {new Date().toLocaleDateString("ca-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+                    </div>
+                  </div>
+                  {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
+                  {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={false}/>}
+                  {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
+                  {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
+                  {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
+                  {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
+                  {section==="manuales"&&<Manuales onManualesChange={onManualesChange}/>}
+                </>
+            }
+          </div>
         </div>
       </div>
     </>
@@ -2161,50 +2201,51 @@ function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }
 
   return (
     <div>
-      <div style={{marginBottom:24,display:"flex",alignItems:"center",gap:16}}>
-        <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:40 }} />
-        <div>
-          <div style={{fontFamily:"Rajdhani",fontSize:22,fontWeight:700}}>Panell de Control</div>
-          <div style={{fontSize:12,color:COLORS.muted}}>{EMPRESA.adreca} · {EMPRESA.telefon}</div>
-        </div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:16,marginBottom:28}}>
-        {stats.map(s=><div key={s.label} className="card" style={{padding:20,borderLeft:`3px solid ${s.color}`}}>
-          <div style={{fontSize:24,marginBottom:8}}>{s.icon}</div>
-          <div style={{fontSize:28,fontWeight:700,fontFamily:"Rajdhani",color:s.color}}>{s.value}</div>
-          <div style={{fontSize:12,color:COLORS.muted,marginTop:4}}>{s.label}</div>
-        </div>)}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:28}}>
+        {stats.map((s,i)=>(
+          <div key={s.label} className="card fade-up" style={{padding:22,animationDelay:`${i*0.07}s`}}>
+            <div style={{fontSize:22,marginBottom:12}}>{s.icon}</div>
+            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:32,fontWeight:400,color:s.color,lineHeight:1}}>{s.value}</div>
+            <div style={{fontSize:12,color:COLORS.muted,marginTop:6}}>{s.label}</div>
+          </div>
+        ))}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
-        <div className="card" style={{padding:20}}>
-          <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.accent}}>⏱ Fitxatges d'avui</div>
-          {fichajesHoyList.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sense fitxatges avui</div>:fichajesHoyList.map(f=>(
-            <div key={f.id} style={{padding:"6px 0",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:13,fontWeight:500}}>{f.trabajador}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."}</span>
-                {f.ubicacionEntrada&&<LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} />}
+        <div className="card fade-up" style={{padding:24,animationDelay:"0.28s"}}>
+          <div className="section-title" style={{marginBottom:16}}>Fitxatges d'avui</div>
+          {fichajesHoyList.length===0
+            ? <div style={{color:COLORS.muted,fontSize:13,padding:"20px 0",textAlign:"center"}}>Sense fitxatges avui</div>
+            : fichajesHoyList.map(f=>(
+              <div key={f.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:13,fontWeight:500}}>{f.trabajador}</span>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:12,color:COLORS.muted}}>{f.entrada} → {f.salida||"..."}</span>
+                  {f.ubicacionEntrada&&<LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} />}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          }
         </div>
-        <div className="card" style={{padding:20}}>
-          <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.warm}}>⚠ Encàrrecs Urgents</div>
-          {urgentes.length===0?<div style={{color:COLORS.muted,fontSize:13}}>Sense encàrrecs urgents</div>:urgentes.map(e=>(
-            <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
-              <div style={{fontSize:13,fontWeight:500}}>{e.titulo}</div>
-              <div style={{fontSize:12,color:COLORS.muted,marginTop:3}}>{(Array.isArray(e.asignados)?e.asignados.join(", "):e.asignado)||"Sense assignar"} · {e.localidad||e.fecha}</div>
-            </div>
-          ))}
+        <div className="card fade-up" style={{padding:24,animationDelay:"0.35s"}}>
+          <div className="section-title" style={{marginBottom:16}}>Encàrrecs urgents</div>
+          {urgentes.length===0
+            ? <div style={{color:COLORS.muted,fontSize:13,padding:"20px 0",textAlign:"center"}}>Cap encàrrec urgent</div>
+            : urgentes.map(e=>(
+              <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
+                <div style={{fontSize:13,fontWeight:500}}>{e.titulo}</div>
+                <div style={{fontSize:12,color:COLORS.muted,marginTop:3}}>{(Array.isArray(e.asignados)?e.asignados.join(", "):e.asignado)||"Sense assignar"} · {e.localidad||e.fecha}</div>
+              </div>
+            ))
+          }
         </div>
       </div>
       {conMaterial.length>0&&(
-        <div className="card" style={{padding:20,borderLeft:`3px solid ${COLORS.yellow}`}}>
-          <div style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,marginBottom:16,color:COLORS.yellow}}>📦 Material pendent</div>
+        <div className="card fade-up" style={{padding:24,borderLeft:`3px solid ${COLORS.yellow}`,animationDelay:"0.42s"}}>
+          <div className="section-title" style={{marginBottom:16,color:COLORS.yellow}}>Material pendent</div>
           {conMaterial.map(e=>(
             <div key={e.id} style={{padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`}}>
               <div style={{fontSize:13,fontWeight:500}}>{e.titulo} <span style={{fontSize:12,color:COLORS.muted}}>— {Array.isArray(e.asignados)?e.asignados.join(", "):e.asignado}</span></div>
-              <div style={{fontSize:12,color:COLORS.yellow,marginTop:3}}>⚠ {e.notasTrabajador}</div>
+              <div style={{fontSize:12,color:"#A16207",marginTop:3,background:"#FEF9C3",padding:"4px 8px",borderRadius:6,display:"inline-block"}}>⚠ {e.notasTrabajador}</div>
             </div>
           ))}
         </div>
@@ -2214,14 +2255,14 @@ function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }
 }
 
 const NAV_ITEMS = [
-  {id:"dashboard",label:"Dashboard",icon:"⬛"},
-  {id:"usuarios",label:"Usuaris",icon:"👑"},
-  {id:"trabajadores",label:"Treballadors",icon:"👷"},
-  {id:"fichajes",label:"Control Horari",icon:"⏱"},
-  {id:"encargos",label:"Encàrrecs",icon:"🔧"},
-  {id:"hojesTreball",label:"Fulls de Treball",icon:"📋"},
-  {id:"albaranes",label:"Albarans",icon:"📄"},
-  {id:"manuales",label:"Manuals",icon:"📚",adminUrl:"http://192.168.1.75:8080"},
+  {id:"dashboard",label:"Inici",icon:"◻"},
+  {id:"usuarios",label:"Usuaris",icon:"◈"},
+  {id:"trabajadores",label:"Treballadors",icon:"◉"},
+  {id:"fichajes",label:"Control Horari",icon:"◷"},
+  {id:"encargos",label:"Encàrrecs",icon:"◈"},
+  {id:"hojesTreball",label:"Fulls de Treball",icon:"◧"},
+  {id:"albaranes",label:"Albarans",icon:"◩"},
+  {id:"manuales",label:"Manuals",icon:"◪",adminUrl:"http://192.168.1.75:8080"},
 ];
 
 export default function App() {
@@ -2245,60 +2286,83 @@ export default function App() {
   useEffect(()=>{ const q=query(collection(db,"albaranes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setAlbaranes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
   useEffect(()=>{ const q=query(collection(db,"hojesTreball"),orderBy("createdAt","desc")); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
 
-  if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"Inter"}}>Carregant...</div>;
+  if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"'DM Sans',sans-serif"}}>Carregant...</div>;
   if(!usuario) return <Login />;
   if(cuentaSinConfigurar) return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,fontFamily:"Inter",flexDirection:"column",gap:16}}>
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,fontFamily:"'DM Sans',sans-serif",flexDirection:"column",gap:16}}>
       <div style={{fontSize:48}}>⚠️</div>
-      <div style={{fontSize:18,fontWeight:700,color:COLORS.text}}>Compte sense configurar</div>
-      <div style={{fontSize:14,color:COLORS.muted,textAlign:"center",maxWidth:340}}>El teu compte no té accés configurat. Contacta amb l'administrador.</div>
+      <div style={{fontFamily:"'DM Serif Display',serif",fontSize:24,fontWeight:400,color:COLORS.text}}>Compte sense configurar</div>
+      <div style={{fontSize:14,color:COLORS.muted,textAlign:"center",maxWidth:340,fontWeight:300}}>El teu compte no té accés configurat. Contacta amb l'administrador.</div>
       <button className="btn btn-danger" onClick={()=>signOut(auth)}>Tancar sessió</button>
     </div>
   );
   if(usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} />;
   if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} onManualesChange={setManuales} />;
 
+  const pendentsCount = hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length;
+  const currentNavLabel = NAV_ITEMS.find(i=>i.id===section)?.label || "Inici";
+
   return (
     <>
       <style>{STYLE}</style>
       <div style={{display:"flex",minHeight:"100vh"}}>
-        <div style={{width:230,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,padding:"20px 0",display:"flex",flexDirection:"column",flexShrink:0}}>
-          <div style={{padding:"0 16px 20px",borderBottom:`1px solid ${COLORS.border}`,textAlign:"center"}}>
-            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{ height:36, maxWidth:"100%" }} />
-            <div style={{fontSize:10,color:COLORS.muted,marginTop:6}}>👑 {usuarioInfo?.nombre||"Admin"}</div>
-            <div style={{marginTop:8}}><NotificacionsAdmin /></div>
+        {/* SIDEBAR */}
+        <div style={{width:220,background:"#fff",borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh"}}>
+          <div style={{padding:"28px 24px 20px",borderBottom:`1px solid ${COLORS.border}`}}>
+            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{height:30,maxWidth:"100%"}} />
+            <div style={{fontSize:10,color:COLORS.muted,marginTop:8,letterSpacing:"0.8px",textTransform:"uppercase",fontWeight:500}}>Espai de gestió</div>
           </div>
-          <nav style={{padding:"12px 0",flex:1}}>
+          <nav style={{padding:"16px 12px",flex:1,display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
             {NAV_ITEMS.map(item=>(
               <button key={item.id} onClick={()=>item.adminUrl ? window.open(item.adminUrl,"_blank") : setSection(item.id)}
-                style={{width:"100%",background:section===item.id?COLORS.accentGlow:"transparent",
-                  borderLeft:section===item.id?`3px solid ${COLORS.accent}`:"3px solid transparent",
+                style={{width:"100%",background:section===item.id?COLORS.accentLight:"transparent",
+                  borderRadius:8,border:"none",
                   color:section===item.id?COLORS.accent:COLORS.muted,
-                  padding:"11px 16px",textAlign:"left",cursor:"pointer",border:"none",
-                  fontSize:12,fontFamily:"Inter",fontWeight:section===item.id?600:400,
-                  display:"flex",alignItems:"center",gap:8,transition:"all .15s"}}>
-                <span>{item.icon}</span>{item.label}
-                {item.adminUrl && <span style={{marginLeft:"auto",fontSize:10,opacity:0.5}}>↗</span>}
-                {item.id==="hojesTreball" && hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length>0 && (
-                  <span style={{marginLeft:"auto",background:COLORS.yellow,color:"#000",fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px"}}>
-                    {hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length}
+                  padding:"10px 12px",textAlign:"left",cursor:"pointer",
+                  fontSize:13,fontFamily:"'DM Sans',sans-serif",fontWeight:section===item.id?500:400,
+                  display:"flex",alignItems:"center",gap:10,transition:"all .15s"}}>
+                <span style={{fontSize:14,width:18,textAlign:"center",opacity:0.7}}>{item.icon}</span>
+                {item.label}
+                {item.adminUrl && <span style={{marginLeft:"auto",fontSize:10,opacity:0.4}}>↗</span>}
+                {item.id==="hojesTreball" && pendentsCount>0 && (
+                  <span style={{marginLeft:"auto",background:COLORS.yellow,color:"#fff",fontSize:10,fontWeight:600,borderRadius:10,padding:"1px 7px"}}>
+                    {pendentsCount}
                   </span>
                 )}
               </button>
             ))}
           </nav>
-          <div style={{padding:"12px 16px",borderTop:`1px solid ${COLORS.border}`}}>
+          <div style={{padding:"16px 20px",borderTop:`1px solid ${COLORS.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:COLORS.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:600,color:COLORS.accent,flexShrink:0}}>
+                {(usuarioInfo?.nombre||"A").charAt(0).toUpperCase()}
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:500,color:COLORS.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{usuarioInfo?.nombre||"Admin"}</div>
+                <div style={{fontSize:11,color:COLORS.muted}}>Administrador</div>
+              </div>
+              <NotificacionsAdmin />
+            </div>
             <button className="btn btn-ghost" style={{width:"100%",fontSize:12}} onClick={()=>signOut(auth)}>Tancar sessió</button>
           </div>
         </div>
-        <div style={{flex:1,padding:28,overflowY:"auto",maxHeight:"100vh"}}>
-          {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
-          {section==="usuarios"&&<GestionUsuarios trabajadores={trabajadores}/>}
-          {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT}/>}
-          {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
-          {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
-          {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
-          {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
+        {/* MAIN */}
+        <div style={{flex:1,overflowY:"auto",maxHeight:"100vh",background:COLORS.bg}}>
+          <div style={{padding:"36px 40px",maxWidth:1100}}>
+            <div style={{marginBottom:28}}>
+              <h2 className="page-title">{currentNavLabel}</h2>
+              <div style={{fontSize:13,color:COLORS.muted,marginTop:4,fontWeight:300}}>
+                {new Date().toLocaleDateString("ca-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+              </div>
+            </div>
+            {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
+            {section==="usuarios"&&<GestionUsuarios trabajadores={trabajadores}/>}
+            {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT}/>}
+            {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
+            {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
+            {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
+            {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
+          </div>
         </div>
       </div>
     </>
