@@ -1481,11 +1481,80 @@ function GestionUsuarios({ trabajadores }) {
 }
 
 // ─── TREBALLADORS ─────────────────────────────────────────────────────────────
-function Trabajadores({ trabajadores, cargandoT }) {
+function ResumHoresTreballador({ treballador, hojesTreball }) {
+  const [tab, setTab] = useState("setmana");
+  const nom = treballador.nombre;
+  const avui = new Date();
+  const avuiStr = avui.toISOString().split("T")[0];
+
+  const getLunes = (d) => { const r = new Date(d); const day = r.getDay(); r.setDate(r.getDate() - (day===0?6:day-1)); return r.toISOString().split("T")[0]; };
+  const mesStr = avuiStr.slice(0,7);
+  const anyStr = avuiStr.slice(0,4);
+  const lunesStr = getLunes(avui);
+
+  const mevesFulles = hojesTreball.filter(h => (Array.isArray(h.operaris)?h.operaris:[]).includes(nom));
+
+  const filtrarPer = (t) => {
+    if (t==="dia")     return mevesFulles.filter(h=>h.data===avuiStr);
+    if (t==="setmana") return mevesFulles.filter(h=>h.data>=lunesStr&&h.data<=avuiStr);
+    if (t==="mes")     return mevesFulles.filter(h=>(h.data||"").startsWith(mesStr));
+    if (t==="any")     return mevesFulles.filter(h=>(h.data||"").startsWith(anyStr));
+    return [];
+  };
+
+  const parseH = (v) => parseFloat(String(v).replace(",",".")) || 0;
+
+  const lista = filtrarPer(tab).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const totalH = lista.reduce((s,h)=>s+parseH(h.horesOperari),0);
+
+  const TABS = [{id:"dia",label:"Dia"},{id:"setmana",label:"Setmana"},{id:"mes",label:"Mes"},{id:"any",label:"Any"}];
+
+  return (
+    <div style={{marginTop:14,borderTop:`1px solid ${COLORS.border}`,paddingTop:12}}>
+      <div style={{display:"flex",gap:4,marginBottom:12}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:500,
+              fontFamily:"'DM Sans',sans-serif",transition:"all .15s",
+              background:tab===t.id?COLORS.accent:"transparent",
+              color:tab===t.id?"#fff":COLORS.muted}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {lista.length===0
+        ? <div style={{fontSize:12,color:COLORS.muted,padding:"10px 0",textAlign:"center"}}>Sense hojes per aquest període</div>
+        : <>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {lista.map(h=>(
+                <div key={h.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 10px",background:COLORS.bg,borderRadius:8}}>
+                  <div>
+                    <span style={{fontWeight:500}}>{h.data}</span>
+                    {h.client&&<span style={{color:COLORS.muted,marginLeft:8}}>{h.client}</span>}
+                    {h.numero&&<span style={{color:COLORS.accent,marginLeft:6}}>#{h.numero}</span>}
+                  </div>
+                  <span style={{fontWeight:600,color:COLORS.accent,whiteSpace:"nowrap",marginLeft:8}}>
+                    {parseH(h.horesOperari)>0?`${parseH(h.horesOperari)}h`:"—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:8,borderTop:`1px solid ${COLORS.border}`}}>
+              <span style={{fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:"0.5px",fontWeight:500}}>{lista.length} full{lista.length!==1?"s":""}</span>
+              <span style={{fontFamily:"'DM Serif Display',serif",fontSize:18,color:COLORS.accent}}>{totalH}h total</span>
+            </div>
+          </>
+      }
+    </div>
+  );
+}
+
+function Trabajadores({ trabajadores, cargandoT, hojesTreball=[] }) {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
   const [guardando, setGuardando] = useState(false);
+  const [resumObert, setResumObert] = useState(null);
   const [form, setForm] = useState({ nombre:"", telefono:"", email:"", cargo:"Tècnic", estado:"Actiu", notas:"" });
 
   const abrirNuevo=()=>{setEditando(null);setForm({nombre:"",telefono:"",email:"",cargo:"Tècnic",estado:"Actiu",notas:""});setModal(true);};
@@ -1501,19 +1570,29 @@ function Trabajadores({ trabajadores, cargandoT }) {
       {cargandoT?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Carregant...</div>:trabajadores.length===0?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Afegeix el primer treballador</div>:(
         <>
           <div style={{fontSize:12,color:COLORS.muted,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Actius ({activos.length})</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14,marginBottom:28}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14,marginBottom:28}}>
             {activos.map(t=>(
               <div key={t.id} className="card" style={{padding:20,borderLeft:`3px solid ${COLORS.accent}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-                  <div><div style={{fontSize:32,marginBottom:4}}>👷</div><div style={{fontWeight:700,fontSize:15}}>{t.nombre}</div><div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>{t.cargo}</div></div>
+                  <div>
+                    <div style={{width:40,height:40,borderRadius:"50%",background:COLORS.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:700,color:COLORS.accent,marginBottom:8}}>
+                      {t.nombre.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{fontWeight:600,fontSize:15}}>{t.nombre}</div>
+                    <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>{t.cargo}</div>
+                  </div>
                   <EstadoBadge estado={t.estado||"Actiu"} />
                 </div>
                 {t.telefono&&<div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>📱 {t.telefono}</div>}
                 {t.email&&<div style={{fontSize:12,color:COLORS.muted,marginBottom:4}}>✉ {t.email}</div>}
                 <div style={{display:"flex",gap:8,marginTop:12}}>
                   <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={()=>abrirEditar(t)}>✏ Editar</button>
+                  <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px",color:resumObert===t.id?COLORS.accent:COLORS.muted,borderColor:resumObert===t.id?COLORS.accent:COLORS.border}} onClick={()=>setResumObert(resumObert===t.id?null:t.id)}>
+                    {resumObert===t.id?"▲ Hores":"▼ Hores"}
+                  </button>
                   <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>
                 </div>
+                {resumObert===t.id && <ResumHoresTreballador treballador={t} hojesTreball={hojesTreball} />}
               </div>
             ))}
           </div>
@@ -2165,7 +2244,7 @@ function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajado
                     </div>
                   </div>
                   {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
-                  {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={false}/>}
+                  {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={false} hojesTreball={hojesTreball}/>}
                   {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
                   {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
                   {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
@@ -2357,7 +2436,7 @@ export default function App() {
             </div>
             {section==="dashboard"&&<Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
             {section==="usuarios"&&<GestionUsuarios trabajadores={trabajadores}/>}
-            {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT}/>}
+            {section==="trabajadores"&&<Trabajadores trabajadores={trabajadores} cargandoT={cargandoT} hojesTreball={hojesTreball}/>}
             {section==="fichajes"&&<Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
             {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
             {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
