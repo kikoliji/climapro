@@ -164,6 +164,15 @@ async function subirFoto(archivo) {
   return res.data.secure_url;
 }
 
+async function pujarFitxerLocal(archivo) {
+  const formData = new FormData();
+  formData.append("file", archivo);
+  const host = `${window.location.protocol}//${window.location.hostname}`;
+  const res = await fetch(`${host}:3001/upload`, { method:"POST", body:formData });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
 function parsearFecha(valor) {
   if (!valor) return "";
   if (typeof valor === "number") {
@@ -442,7 +451,7 @@ function Modal({ title, onClose, children, wide, extraWide }) {
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}>
       <div className="card" style={{ width:"100%", maxWidth: extraWide?900:wide?720:540, padding:24, margin:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <span style={{ fontFamily:"Rajdhani", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
+          <span style={{ fontFamily:"'DM Serif Display',serif", fontSize:18, fontWeight:700, color:COLORS.accent }}>{title}</span>
           <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
         </div>
         {children}
@@ -468,7 +477,7 @@ function EstadoBadge({ estado }) {
 function Header({ title, onAdd, addLabel }) {
   return (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
-      <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>{title}</h2>
+      <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:24, fontWeight:700 }}>{title}</h2>
       {onAdd && <button className="btn btn-primary" onClick={onAdd}>{addLabel}</button>}
     </div>
   );
@@ -551,7 +560,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
   const emptyForm = {
     numero: "", data: new Date().toISOString().split("T")[0],
     client: "", domicili: "", poblacio: "", telefon: "", nif: "",
-    operaris: [], horesOperari: "", horesAjudant: "", desplacaments: "", dietes: "", altres: "",
+    operaris: isWorker ? [isWorker] : [], horesOperari: "", horesAjudant: "", desplacaments: "", dietes: "", altres: "",
     descripcio: "", materials: [],
     signatura: null, estat: "Pendent", encargoId: "", email: "",
   };
@@ -881,7 +890,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
           {generant ? "Generant..." : "📧 Enviar per correu"}
         </button>
         <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
-          {guardando ? "Guardant..." : "💾 Guardar ☁"}
+          {guardando ? "Guardant..." : "💾 Guardar"}
         </button>
       </div>
     </div>
@@ -889,7 +898,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
 }
 
 // ─── HOJAS DE TRABAJO (SECCIÓN PRINCIPAL) ────────────────────────────────────
-function HojesTreball({ trabajadores, encargos }) {
+function HojesTreball({ trabajadores, encargos, podeAprovar=false }) {
   const [hojes, setHojes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
@@ -927,7 +936,7 @@ function HojesTreball({ trabajadores, encargos }) {
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
-        <h2 style={{ fontFamily:"Rajdhani", fontSize:24, fontWeight:700 }}>Fulls de Treball ☁</h2>
+        <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:24, fontWeight:700 }}>Fulls de Treball</h2>
         <button className="btn btn-primary" onClick={()=>{ setEditant(null); setModal(true); }}>+ Nou full</button>
       </div>
 
@@ -941,7 +950,7 @@ function HojesTreball({ trabajadores, encargos }) {
         ))}
         <input className="input" placeholder="🔍 Client o número..." style={{ flex:1, minWidth:160, fontSize:12 }}
           value={filtreBusqueda} onChange={e=>setFiltreBusqueda(e.target.value)} />
-        <span style={{ alignSelf:"center", fontFamily:"Rajdhani", fontWeight:700, fontSize:14, color:COLORS.accent }}>{lista.length} fulls</span>
+        <span style={{ alignSelf:"center", fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:14, color:COLORS.accent }}>{lista.length} fulls</span>
       </div>
 
       {/* LLISTA */}
@@ -955,14 +964,14 @@ function HojesTreball({ trabajadores, encargos }) {
                   <div>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
                       <EstadoBadge estado={h.estat||"Pendent"} />
-                      {h.numero && <span style={{ fontFamily:"Rajdhani", fontWeight:700, color:COLORS.accent, fontSize:15 }}>#{h.numero}</span>}
+                      {h.numero && <span style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, color:COLORS.accent, fontSize:15 }}>#{h.numero}</span>}
                       {h.signatura && <span className="badge" style={{ background:"rgba(0,230,118,.15)", color:COLORS.green }}>✅ Signat</span>}
                     </div>
                     <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{h.client || "Sense client"}</div>
                     <div style={{ fontSize:12, color:COLORS.muted }}>
                       {h.data}{h.poblacio ? ` · ${h.poblacio}` : ""}{Array.isArray(h.operaris) && h.operaris.length > 0 ? ` · 👷 ${h.operaris.join(", ")}` : ""}
                     </div>
-                    {h.total && <div style={{ fontSize:13, color:COLORS.green, marginTop:4, fontFamily:"Rajdhani", fontWeight:700 }}>TOTAL: {h.total}€</div>}
+                    {h.total && <div style={{ fontSize:13, color:COLORS.green, marginTop:4, fontFamily:"'DM Serif Display',serif", fontWeight:700 }}>TOTAL: {h.total}€</div>}
                     {h.descripcio && <div style={{ fontSize:12, color:COLORS.muted, marginTop:4, fontStyle:"italic" }}>"{h.descripcio.substring(0,80)}{h.descripcio.length>80?"...":""}"</div>}
                   </div>
                   <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -972,6 +981,12 @@ function HojesTreball({ trabajadores, encargos }) {
                       onClick={()=>descarregarPDF(h)} disabled={generant===h.id}>
                       {generant===h.id ? "..." : "📄 PDF"}
                     </button>
+                    {podeAprovar && h.estat==="Pendent" && (
+                      <button className="btn btn-primary" style={{fontSize:12,padding:"6px 12px",background:COLORS.green}}
+                        onClick={()=>updateDoc(doc(db,"hojesTreball",h.id),{estat:"Completat"})}>
+                        ✅ Aprovar
+                      </button>
+                    )}
                     <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(h)}>🗑</button>
                   </div>
                 </div>
@@ -1115,7 +1130,7 @@ function ResumSetmanal({ nom, fichajes }) {
   const nomsDia = ["Dl","Dt","Dc","Dj","Dv"];
   return (
     <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.yellow}` }}>
-      <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:17, marginBottom:14, color:COLORS.yellow }}>📅 Resum setmanal</div>
+      <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:17, marginBottom:14, color:COLORS.yellow }}>📅 Resum setmanal</div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:8 }}>
         {dies.map((dia, i) => {
           const tramsDia = fichajes.filter(f=>f.trabajador===nom&&f.fecha===dia);
@@ -1138,7 +1153,7 @@ function ResumSetmanal({ nom, fichajes }) {
               ) : mins === 0 ? (
                 <div style={{ fontSize:11, color:COLORS.danger }}>⚠ 0h</div>
               ) : (
-                <div style={{ fontSize:13, fontWeight:700, color: mins>=480?COLORS.green:COLORS.yellow, fontFamily:"Rajdhani" }}>
+                <div style={{ fontSize:13, fontWeight:700, color: mins>=480?COLORS.green:COLORS.yellow, fontFamily:"'DM Serif Display',serif" }}>
                   {Math.floor(mins/60)}h{mins%60>0?` ${mins%60}m`:""}
                 </div>
               )}
@@ -1234,7 +1249,7 @@ function ResumHoresDetallat({ nom, mevesFulles }) {
       {/* SETMANA */}
       {tab==="setmana"&&(
         fullsSetmana.length===0
-          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense hojes aquesta setmana</div>
+          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense fulls aquesta setmana</div>
           : <>
               {groupBy(fullsSetmana,h=>h.data).map(([dia,fulls])=>{
                 const totalDia=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
@@ -1269,7 +1284,7 @@ function ResumHoresDetallat({ nom, mevesFulles }) {
       {/* MES */}
       {tab==="mes"&&(
         fullsMes.length===0
-          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense hojes aquest mes</div>
+          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense fulls aquest mes</div>
           : <>
               {groupBy(fullsMes,h=>getLunes(h.data)).map(([ws,fulls])=>{
                 const we=weekEnd(ws);
@@ -1305,7 +1320,7 @@ function ResumHoresDetallat({ nom, mevesFulles }) {
       {/* ANY */}
       {tab==="any"&&(
         fullsAny.length===0
-          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense hojes aquest any</div>
+          ? <div style={{color:COLORS.muted,fontSize:13,textAlign:"center",padding:"20px 0"}}>Sense fulls aquest any</div>
           : <>
               {groupBy(fullsAny,h=>(h.data||"").slice(0,7)).map(([ms,fulls])=>{
                 const totalM=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
@@ -1415,7 +1430,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
         {/* FICHAR */}
         <div className="card" style={{ padding:24, marginBottom:20, borderTop:`3px solid ${COLORS.accent}` }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
-            <div style={{ fontFamily:"Rajdhani", fontSize:20, fontWeight:700 }}>{new Date().toLocaleDateString("ca-ES",{weekday:"long",day:"numeric",month:"long"})}</div>
+            <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:20, fontWeight:700 }}>{new Date().toLocaleDateString("ca-ES",{weekday:"long",day:"numeric",month:"long"})}</div>
             {totalHoyMins>0&&<div style={{ fontSize:13, color:COLORS.accent, marginTop:4 }}>⏱ Total avui: {Math.floor(totalHoyMins/60)}h {totalHoyMins%60}m</div>}
           </div>
           {misFichajesHoy.length>0&&(
@@ -1442,7 +1457,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
 
         {/* ENCÀRRECS */}
         <div className="card" style={{ padding:20, marginBottom:20 }}>
-          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, marginBottom:16, color:COLORS.warm }}>🔧 Els meus encàrrecs ({misEncargos.length})</div>
+          <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:18, marginBottom:16, color:COLORS.warm }}>🔧 Els meus encàrrecs ({misEncargos.length})</div>
           {misEncargos.length===0
             ? <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:20 }}>Sense encàrrecs assignats avui</div>
             : misEncargos.map(e=>{
@@ -1475,7 +1490,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
         {/* FULLS DE TREBALL DEL TREBALLADOR */}
         <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.green}` }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
-            <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:18, color:COLORS.green }}>📋 Els meus fulls de treball ({mevesFulles.length})</div>
+            <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:18, color:COLORS.green }}>📋 Els meus fulls de treball ({mevesFulles.length})</div>
             <button className="btn btn-primary" style={{ fontSize:13 }} onClick={()=>{ setEditantFull(null); setMostrarFormFull(true); }}>
               + Crear full de treball
             </button>
@@ -1487,7 +1502,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
                 <div style={{ flex:1 }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
                     <EstadoBadge estado={h.estat||"Pendent"} />
-                    {h.numero&&<span style={{ fontFamily:"Rajdhani", fontWeight:700, color:COLORS.accent, fontSize:14 }}>#{h.numero}</span>}
+                    {h.numero&&<span style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, color:COLORS.accent, fontSize:14 }}>#{h.numero}</span>}
                     {h.signatura&&<span className="badge" style={{ background:"rgba(0,230,118,.15)", color:COLORS.green }}>✅ Signat</span>}
                   </div>
                   <div style={{ fontSize:13, fontWeight:600 }}>{h.client||"Sense client"}</div>
@@ -1501,9 +1516,15 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
           }
         </div>
 
+        {/* MANUALS (lectura) */}
+        <div className="card" style={{ padding:20, marginBottom:20 }}>
+          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:18, fontWeight:400, marginBottom:16 }}>📁 Manuals tècnics</div>
+          <DocManuals solaLectura={true} />
+        </div>
+
         {/* HISTORIAL */}
         <div className="card" style={{ padding:20 }}>
-          <div style={{ fontFamily:"Rajdhani", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Els meus últims dies</div>
+          <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Els meus últims dies</div>
           {Object.keys(porFecha).length===0?<div style={{ color:COLORS.muted, fontSize:13 }}>Sense registres</div>
             :Object.entries(porFecha).slice(0,5).map(([fecha,tramos])=>{
               const totalDia=tramos.reduce((s,f)=>s+calcMinutos(f.entrada,f.salida),0);
@@ -1532,7 +1553,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
           <FormHojaTreball
             hoja={editantFull}
             onClose={()=>setMostrarFormFull(false)}
-            trabajadores={[{id:"w", nombre:usuarioInfo.nombre, estado:"Actiu"}]}
+            trabajadores={trabajadores}
             encargos={encargos}
             materialsHistorial={materialsHistorial}
             isWorker={usuarioInfo.nombre}
@@ -1551,6 +1572,20 @@ function GestionUsuarios({ trabajadores }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [usuarios, setUsuarios] = useState([]);
+  const [confirmarEliminarUsuari, setConfirmarEliminarUsuari] = useState(null);
+  const [editantRol, setEditantRol] = useState(null);
+  const [rolForm, setRolForm] = useState({ rol:"", seccionsPermeses:[] });
+  const [guardandoRol, setGuardandoRol] = useState(false);
+
+  const editarRol = async () => {
+    setGuardandoRol(true);
+    const dades = { rol: rolForm.rol };
+    if (rolForm.rol === "secretaria") dades.seccionsPermeses = rolForm.seccionsPermeses;
+    else dades.seccionsPermeses = [];
+    await updateDoc(doc(db, "usuarios", editantRol.id), dades);
+    setGuardandoRol(false);
+    setEditantRol(null);
+  };
 
   useEffect(()=>{ return onSnapshot(collection(db,"usuarios"),snap=>setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
 
@@ -1594,20 +1629,76 @@ function GestionUsuarios({ trabajadores }) {
 
   return (
     <div>
-      <Header title="Gestió d'Usuaris ☁" onAdd={()=>setModal(true)} addLabel="+ Crear usuari" />
+      <Header title="Gestió d'Usuaris" onAdd={()=>setModal(true)} addLabel="+ Crear usuari" />
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
         {usuarios.map(u=>(
           <div key={u.id} className="card" style={{ padding:20, borderLeft:`3px solid ${u.rol==="admin"?COLORS.yellow:u.rol==="secretaria"?COLORS.warm:COLORS.accent}` }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-              <div style={{ fontSize:28 }}>{u.rol==="admin"?"👑":u.rol==="secretaria"?"📋":"👷"}</div>
-              <span className="badge" style={{ background:u.rol==="admin"?"rgba(255,214,0,.2)":u.rol==="secretaria"?"rgba(255,107,53,.2)":"rgba(0,196,255,.15)", color:u.rol==="admin"?COLORS.yellow:u.rol==="secretaria"?COLORS.warm:COLORS.accent }}>{u.rol==="admin"?"Administrador":u.rol==="secretaria"?"Secretaria":"Treballador"}</span>
+              <div style={{ fontSize:28 }}>{u.rol==="admin"?"👑":u.rol==="secretaria"?"📋":u.rol==="encarregat"?"🔑":"👷"}</div>
+              <span className="badge" style={{ background:u.rol==="admin"?"rgba(255,214,0,.2)":u.rol==="secretaria"?"rgba(255,107,53,.2)":u.rol==="encarregat"?"rgba(45,106,79,.15)":"rgba(0,196,255,.15)", color:u.rol==="admin"?COLORS.yellow:u.rol==="secretaria"?COLORS.warm:u.rol==="encarregat"?COLORS.accent:COLORS.accent }}>{u.rol==="admin"?"Administrador":u.rol==="secretaria"?"Secretaria":u.rol==="encarregat"?"Encarregat":"Treballador"}</span>
             </div>
             <div style={{ fontWeight:700, fontSize:15 }}>{u.nombre}</div>
             <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>{u.email}</div>
-            <div style={{ marginTop:12 }}><button className="btn btn-danger" onClick={()=>deleteDoc(doc(db,"usuarios",u.id))}>🗑 Eliminar accés</button></div>
+            <div style={{ marginTop:12, display:"flex", gap:8, flexWrap:"wrap" }}>
+              <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>{ setEditantRol(u); setRolForm({rol:u.rol||"trabajador",seccionsPermeses:u.seccionsPermeses||[]}); }}>✏ Editar rol</button>
+              <button className="btn btn-danger" onClick={()=>setConfirmarEliminarUsuari(u)}>🗑 Eliminar accés</button>
+            </div>
           </div>
         ))}
       </div>
+
+      {editantRol&&(
+        <Modal title={`Editar rol — ${editantRol.nombre}`} onClose={()=>setEditantRol(null)}>
+          <div style={{display:"grid",gap:16}}>
+            <div style={{padding:"12px 14px",background:COLORS.bg,borderRadius:10}}>
+              <div style={{fontSize:14,fontWeight:600}}>{editantRol.nombre}</div>
+              <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>{editantRol.email}</div>
+            </div>
+            <div><label>Rol</label>
+              <select className="select" style={{width:"100%"}} value={rolForm.rol} onChange={e=>setRolForm({rol:e.target.value,seccionsPermeses:[]})}>
+                <option value="trabajador">Treballador</option>
+                <option value="encarregat">Encarregat</option>
+                <option value="secretaria">Secretaria</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+            {rolForm.rol==="secretaria"&&(
+              <div>
+                <label>Seccions permeses</label>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:6}}>
+                  {NAV_ITEMS.filter(i=>i.id!=="usuarios").map(item=>{
+                    const sel=(rolForm.seccionsPermeses||[]).includes(item.id);
+                    return(
+                      <label key={item.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 10px",borderRadius:8,background:sel?COLORS.accentGlow:COLORS.surface,border:`1px solid ${sel?COLORS.accent:COLORS.border}`,fontSize:12,fontWeight:500,textTransform:"none",letterSpacing:0}}>
+                        <input type="checkbox" checked={sel} onChange={()=>{
+                          const prev=rolForm.seccionsPermeses||[];
+                          setRolForm({...rolForm,seccionsPermeses:sel?prev.filter(x=>x!==item.id):[...prev,item.id]});
+                        }} style={{accentColor:COLORS.accent}} />
+                        {item.icon} {item.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setEditantRol(null)}>Cancel·lar</button>
+              <button className="btn btn-primary" onClick={editarRol} disabled={guardandoRol}>{guardandoRol?"Guardant...":"Guardar canvis"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {confirmarEliminarUsuari&&<Modal title="Eliminar accés?" onClose={()=>setConfirmarEliminarUsuari(null)}>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminarUsuari.nombre}</div>
+          <div style={{fontSize:13,color:COLORS.muted,marginTop:4}}>{confirmarEliminarUsuari.email} — {confirmarEliminarUsuari.rol==="admin"?"Administrador":confirmarEliminarUsuari.rol==="secretaria"?"Secretaria":"Treballador"}</div>
+          <div style={{fontSize:13,color:COLORS.muted,marginTop:8}}>Eliminaràs l'accés. No es pot desfer.</div>
+        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button className="btn btn-ghost" onClick={()=>setConfirmarEliminarUsuari(null)}>Cancel·lar</button>
+          <button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>{deleteDoc(doc(db,"usuarios",confirmarEliminarUsuari.id));setConfirmarEliminarUsuari(null);}}>Sí, eliminar</button>
+        </div>
+      </Modal>}
       {modal&&<Modal title="Crear usuari" onClose={()=>setModal(false)}>
         <div style={{ display:"grid", gap:14 }}>
           <div><label>Treballador</label>
@@ -1621,6 +1712,7 @@ function GestionUsuarios({ trabajadores }) {
           <div><label>Rol</label>
             <select className="select" style={{ width:"100%" }} value={form.rol} onChange={e=>setForm({...form,rol:e.target.value,seccionsPermeses:[]})}>
               <option value="trabajador">Treballador</option>
+              <option value="encarregat">Encarregat</option>
               <option value="secretaria">Secretaria</option>
               <option value="admin">Administrador</option>
             </select>
@@ -1659,72 +1751,176 @@ function GestionUsuarios({ trabajadores }) {
 function ResumHoresTreballador({ treballador, hojesTreball }) {
   const [tab, setTab] = useState("setmana");
   const nom = treballador.nombre;
+
+  const DIES_CA = ["Diumenge","Dilluns","Dimarts","Dimecres","Dijous","Divendres","Dissabte"];
+  const MESOS_CA = ["Gener","Febrer","Març","Abril","Maig","Juny","Juliol","Agost","Setembre","Octubre","Novembre","Desembre"];
+
+  const parseH = (v) => parseFloat(String(v||0).replace(",",".")) || 0;
+
   const avui = new Date();
   const avuiStr = avui.toISOString().split("T")[0];
+  const mesStr  = avuiStr.slice(0,7);
+  const anyStr  = avuiStr.slice(0,4);
 
-  const getLunes = (d) => { const r = new Date(d); const day = r.getDay(); r.setDate(r.getDate() - (day===0?6:day-1)); return r.toISOString().split("T")[0]; };
-  const mesStr = avuiStr.slice(0,7);
-  const anyStr = avuiStr.slice(0,4);
+  const getLunes = (d) => {
+    const r = new Date(typeof d==="string" ? d+"T00:00:00" : d);
+    const day = r.getDay();
+    r.setDate(r.getDate()-(day===0?6:day-1));
+    return r.toISOString().split("T")[0];
+  };
   const lunesStr = getLunes(avui);
+  const diumenge = (() => { const r=new Date(lunesStr+"T00:00:00"); r.setDate(r.getDate()+6); return r.toISOString().split("T")[0]; })();
 
   const mevesFulles = hojesTreball.filter(h => (Array.isArray(h.operaris)?h.operaris:[]).includes(nom));
 
-  const filtrarPer = (t) => {
-    if (t==="dia")     return mevesFulles.filter(h=>h.data===avuiStr);
-    if (t==="setmana") return mevesFulles.filter(h=>h.data>=lunesStr&&h.data<=avuiStr);
-    if (t==="mes")     return mevesFulles.filter(h=>(h.data||"").startsWith(mesStr));
-    if (t==="any")     return mevesFulles.filter(h=>(h.data||"").startsWith(anyStr));
-    return [];
+  const fullsSetmana = mevesFulles.filter(h=>h.data>=lunesStr&&h.data<=diumenge);
+  const fullsMes     = mevesFulles.filter(h=>(h.data||"").startsWith(mesStr));
+  const fullsAny     = mevesFulles.filter(h=>(h.data||"").startsWith(anyStr));
+
+  const horesSetmana = fullsSetmana.reduce((s,h)=>s+parseH(h.horesOperari),0);
+  const horesMes     = fullsMes.reduce((s,h)=>s+parseH(h.horesOperari),0);
+  const horesAny     = fullsAny.reduce((s,h)=>s+parseH(h.horesOperari),0);
+
+  const formatDia = (ds) => { const d=new Date(ds+"T00:00:00"); return `${DIES_CA[d.getDay()]} ${d.getDate()} ${MESOS_CA[d.getMonth()]}`; };
+  const monthName = (ms) => { const [,m]=ms.split("-"); return `${MESOS_CA[parseInt(m)-1]} ${ms.slice(0,4)}`; };
+  const weekEnd   = (ws) => { const r=new Date(ws+"T00:00:00"); r.setDate(r.getDate()+6); return r.toISOString().split("T")[0]; };
+
+  const groupBy = (fulls, keyFn) => {
+    const g={};
+    fulls.forEach(h=>{ const k=keyFn(h); if(!g[k])g[k]=[]; g[k].push(h); });
+    return Object.entries(g).sort((a,b)=>b[0].localeCompare(a[0]));
   };
 
-  const parseH = (v) => parseFloat(String(v).replace(",",".")) || 0;
-
-  const lista = filtrarPer(tab).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
-  const totalH = lista.reduce((s,h)=>s+parseH(h.horesOperari),0);
-
-  const TABS = [{id:"dia",label:"Dia"},{id:"setmana",label:"Setmana"},{id:"mes",label:"Mes"},{id:"any",label:"Any"}];
+  const TABS = [{id:"setmana",label:"Setmana"},{id:"mes",label:"Mes"},{id:"any",label:"Any"}];
+  const METRICS = [
+    {label:"Aquesta setmana", h:horesSetmana},
+    {label:"Aquest mes",      h:horesMes},
+    {label:"Aquest any",      h:horesAny},
+  ];
 
   return (
-    <div style={{marginTop:14,borderTop:`1px solid ${COLORS.border}`,paddingTop:12}}>
-      <div style={{display:"flex",gap:4,marginBottom:12}}>
-        {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:500,
-              fontFamily:"'DM Sans',sans-serif",transition:"all .15s",
-              background:tab===t.id?COLORS.accent:"transparent",
-              color:tab===t.id?"#fff":COLORS.muted}}>
-            {t.label}
-          </button>
+    <div style={{marginTop:14,borderTop:`1px solid ${COLORS.border}`,paddingTop:14}}>
+      {/* MÈTRIQUES */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+        {METRICS.map(m=>(
+          <div key={m.label} style={{background:COLORS.bg,borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:COLORS.accent,lineHeight:1}}>{m.h}h</div>
+            <div style={{fontSize:9,color:COLORS.muted,marginTop:4,textTransform:"uppercase",letterSpacing:"0.4px",fontWeight:500}}>{m.label}</div>
+          </div>
         ))}
       </div>
-      {lista.length===0
-        ? <div style={{fontSize:12,color:COLORS.muted,padding:"10px 0",textAlign:"center"}}>Sense hojes per aquest període</div>
-        : <>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {lista.map(h=>(
-                <div key={h.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 10px",background:COLORS.bg,borderRadius:8}}>
-                  <div>
-                    <span style={{fontWeight:500}}>{h.data}</span>
-                    {h.client&&<span style={{color:COLORS.muted,marginLeft:8}}>{h.client}</span>}
-                    {h.numero&&<span style={{color:COLORS.accent,marginLeft:6}}>#{h.numero}</span>}
+
+      {/* PESTANYES */}
+      <div style={{display:"flex",gap:4,marginBottom:12}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            padding:"4px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:500,
+            fontFamily:"'DM Sans',sans-serif",transition:"all .15s",
+            background:tab===t.id?COLORS.accent:"transparent",
+            color:tab===t.id?"#fff":COLORS.muted
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* SETMANA */}
+      {tab==="setmana"&&(
+        fullsSetmana.length===0
+          ? <div style={{color:COLORS.muted,fontSize:12,textAlign:"center",padding:"12px 0"}}>Sense fulls aquesta setmana</div>
+          : <>
+              {groupBy(fullsSetmana,h=>h.data).map(([dia,fulls])=>{
+                const totalDia=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
+                return (
+                  <div key={dia} style={{background:COLORS.bg,borderRadius:10,padding:10,marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontWeight:600,fontSize:12,color:COLORS.text}}>{formatDia(dia)}</span>
+                      <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20}}>{totalDia}h</span>
+                    </div>
+                    {fulls.map(h=>(
+                      <div key={h.id} style={{padding:"5px 0",borderTop:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,fontWeight:500}}>{h.client||"Sense client"}</div>
+                          <div style={{marginTop:1}}>
+                            {h.numero&&<span style={{fontSize:10,color:COLORS.accent,marginRight:5}}>#{h.numero}</span>}
+                            {h.descripcio&&<span style={{fontSize:10,color:COLORS.muted}}>{h.descripcio.substring(0,50)}{h.descripcio.length>50?"…":""}</span>}
+                          </div>
+                        </div>
+                        <span style={{fontSize:12,fontWeight:600,color:COLORS.accent,whiteSpace:"nowrap"}}>{parseH(h.horesOperari)>0?`${parseH(h.horesOperari)}h`:"—"}</span>
+                      </div>
+                    ))}
                   </div>
-                  <span style={{fontWeight:600,color:COLORS.accent,whiteSpace:"nowrap",marginLeft:8}}>
-                    {parseH(h.horesOperari)>0?`${parseH(h.horesOperari)}h`:"—"}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:8,borderTop:`1px solid ${COLORS.border}`}}>
-              <span style={{fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:"0.5px",fontWeight:500}}>{lista.length} full{lista.length!==1?"s":""}</span>
-              <span style={{fontFamily:"'DM Serif Display',serif",fontSize:18,color:COLORS.accent}}>{totalH}h total</span>
-            </div>
-          </>
-      }
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:6,paddingTop:8,borderTop:`1px solid ${COLORS.border}`}}>
+                <span style={{fontSize:11,color:COLORS.muted}}>Total setmana</span>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:COLORS.accent}}>{horesSetmana}h</span>
+              </div>
+            </>
+      )}
+
+      {/* MES */}
+      {tab==="mes"&&(
+        fullsMes.length===0
+          ? <div style={{color:COLORS.muted,fontSize:12,textAlign:"center",padding:"12px 0"}}>Sense fulls aquest mes</div>
+          : <>
+              {groupBy(fullsMes,h=>getLunes(h.data)).map(([ws,fulls])=>{
+                const we=weekEnd(ws);
+                const totalS=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
+                return (
+                  <div key={ws} style={{background:COLORS.bg,borderRadius:10,padding:10,marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontWeight:600,fontSize:12}}>
+                        {ws.slice(8)} – {we.slice(8)} {MESOS_CA[parseInt(mesStr.slice(5))-1]}
+                      </span>
+                      <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20}}>{totalS}h</span>
+                    </div>
+                    {fulls.sort((a,b)=>(a.data||"").localeCompare(b.data||"")).map(h=>(
+                      <div key={h.id} style={{padding:"4px 0",borderTop:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+                        <div style={{flex:1}}>
+                          <span style={{fontSize:10,color:COLORS.muted,marginRight:5}}>{h.data?.slice(8)}·</span>
+                          <span style={{fontSize:12,fontWeight:500}}>{h.client||"Sense client"}</span>
+                          {h.numero&&<span style={{fontSize:10,color:COLORS.accent,marginLeft:5}}>#{h.numero}</span>}
+                        </div>
+                        <span style={{fontSize:12,fontWeight:600,color:COLORS.accent}}>{parseH(h.horesOperari)>0?`${parseH(h.horesOperari)}h`:"—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:6,paddingTop:8,borderTop:`1px solid ${COLORS.border}`}}>
+                <span style={{fontSize:11,color:COLORS.muted}}>Total mes</span>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:COLORS.accent}}>{horesMes}h</span>
+              </div>
+            </>
+      )}
+
+      {/* ANY */}
+      {tab==="any"&&(
+        fullsAny.length===0
+          ? <div style={{color:COLORS.muted,fontSize:12,textAlign:"center",padding:"12px 0"}}>Sense fulls aquest any</div>
+          : <>
+              {groupBy(fullsAny,h=>(h.data||"").slice(0,7)).map(([ms,fulls])=>{
+                const totalM=fulls.reduce((s,h)=>s+parseH(h.horesOperari),0);
+                return (
+                  <div key={ms} style={{background:COLORS.bg,borderRadius:10,padding:10,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <span style={{fontWeight:600,fontSize:12}}>{monthName(ms)}</span>
+                      <span style={{fontSize:10,color:COLORS.muted,marginLeft:8}}>{fulls.length} full{fulls.length!==1?"s":""}</span>
+                    </div>
+                    <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20}}>{totalM}h</span>
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:6,paddingTop:8,borderTop:`1px solid ${COLORS.border}`}}>
+                <span style={{fontSize:11,color:COLORS.muted}}>Total any</span>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:20,color:COLORS.accent}}>{horesAny}h</span>
+              </div>
+            </>
+      )}
     </div>
   );
 }
 
-function Trabajadores({ trabajadores, cargandoT, hojesTreball=[] }) {
+function Trabajadores({ trabajadores, cargandoT, hojesTreball=[], podeEliminar=true }) {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(null);
@@ -1741,7 +1937,7 @@ function Trabajadores({ trabajadores, cargandoT, hojesTreball=[] }) {
 
   return (
     <div>
-      <Header title="Treballadors ☁" onAdd={abrirNuevo} addLabel="+ Afegir treballador" />
+      <Header title="Treballadors" onAdd={abrirNuevo} addLabel="+ Afegir treballador" />
       {cargandoT?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Carregant...</div>:trabajadores.length===0?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Afegeix el primer treballador</div>:(
         <>
           <div style={{fontSize:12,color:COLORS.muted,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Actius ({activos.length})</div>
@@ -1765,7 +1961,7 @@ function Trabajadores({ trabajadores, cargandoT, hojesTreball=[] }) {
                   <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px",color:resumObert===t.id?COLORS.accent:COLORS.muted,borderColor:resumObert===t.id?COLORS.accent:COLORS.border}} onClick={()=>setResumObert(resumObert===t.id?null:t.id)}>
                     {resumObert===t.id?"▲ Hores":"▼ Hores"}
                   </button>
-                  <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>
+                  {podeEliminar&&<button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>}
                 </div>
                 {resumObert===t.id && <ResumHoresTreballador treballador={t} hojesTreball={hojesTreball} />}
               </div>
@@ -1780,7 +1976,7 @@ function Trabajadores({ trabajadores, cargandoT, hojesTreball=[] }) {
                   <div style={{fontSize:12,color:COLORS.muted}}>{t.cargo}</div>
                   <div style={{display:"flex",gap:8,marginTop:12}}>
                     <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={()=>abrirEditar(t)}>✏ Editar</button>
-                    <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>
+                    {podeEliminar&&<button className="btn btn-danger" onClick={()=>setConfirmarEliminar(t)}>🗑</button>}
                   </div>
                 </div>
               ))}
@@ -1841,7 +2037,7 @@ function Fichajes({ trabajadores, fichajes }) {
   return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-        <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Control Horari ☁</h2>
+        <h2 style={{fontFamily:"'DM Serif Display',serif",fontSize:24,fontWeight:700}}>Control Horari</h2>
         <div style={{display:"flex",gap:8}}>
           <button className="btn btn-ghost" onClick={()=>setVistaAgrupada(!vistaAgrupada)} style={{fontSize:12}}>{vistaAgrupada?"Vista detallada":"Vista agrupada"}</button>
           <button className="btn btn-ghost" onClick={()=>{setTrabajadorPDF(todosNombres[0]||"");setModalPDF(true);}}>📄 PDF 4 anys</button>
@@ -1855,7 +2051,7 @@ function Fichajes({ trabajadores, fichajes }) {
         </select>
         <input className="input" type="date" style={{width:"auto"}} value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} />
         {filtroFecha&&<button className="btn btn-ghost" style={{fontSize:12}} onClick={()=>setFiltroFecha("")}>✕ Netejar</button>}
-        <span style={{marginLeft:"auto",fontFamily:"Rajdhani",fontSize:14,fontWeight:700,color:COLORS.accent}}>Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m</span>
+        <span style={{marginLeft:"auto",fontFamily:"'DM Serif Display',serif",fontSize:14,fontWeight:700,color:COLORS.accent}}>Total: {Math.floor(horasTotal/60)}h {horasTotal%60}m</span>
       </div>
       {vistaAgrupada?(
         <div style={{display:"grid",gap:12}}>
@@ -1864,7 +2060,7 @@ function Fichajes({ trabajadores, fichajes }) {
               <div key={`${g.trabajador}__${g.fecha}`} className="card" style={{padding:16}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <div><span style={{fontWeight:600,fontSize:14}}>{g.trabajador}</span><span style={{fontSize:13,color:COLORS.muted,marginLeft:12}}>{g.fecha}</span></div>
-                  <span style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:16,color:COLORS.accent}}>{Math.floor(g.totalMins/60)}h {g.totalMins%60}m total</span>
+                  <span style={{fontFamily:"'DM Serif Display',serif",fontWeight:700,fontSize:16,color:COLORS.accent}}>{Math.floor(g.totalMins/60)}h {g.totalMins%60}m total</span>
                 </div>
                 <div style={{display:"grid",gap:6}}>
                   {g.tramos.sort((a,b)=>(a.entrada||"").localeCompare(b.entrada||"")).map((f,i)=>(
@@ -1893,7 +2089,7 @@ function Fichajes({ trabajadores, fichajes }) {
                 <td style={{padding:"12px 16px",fontSize:13,color:COLORS.green}}>{f.entrada}</td>
                 <td style={{padding:"12px 16px"}}>{f.ubicacionEntrada?<LinkMapa lat={f.ubicacionEntrada.lat} lng={f.ubicacionEntrada.lng} precision={f.ubicacionEntrada.precision} />:<span style={{fontSize:11,color:COLORS.muted}}>—</span>}</td>
                 <td style={{padding:"12px 16px",fontSize:13,color:f.salida?COLORS.warm:COLORS.muted}}>{f.salida||<button className="btn btn-primary" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>registrarSalida(f)}>Registrar sortida</button>}</td>
-                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
+                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"'DM Serif Display',serif",fontWeight:600,color:COLORS.accent}}>{calcHoras(f.entrada,f.salida)}</td>
                 <td style={{padding:"12px 16px"}}><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(f)}>🗑</button></td>
               </tr>
             ))}</tbody>
@@ -1924,7 +2120,7 @@ function Fichajes({ trabajadores, fichajes }) {
           <div><label>Notes</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button>
-            <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardant...":"Guardar ☁"}</button>
+            <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardant...":"Guardar"}</button>
           </div>
         </div>
       </Modal>}
@@ -1933,7 +2129,7 @@ function Fichajes({ trabajadores, fichajes }) {
 }
 
 // ─── ENCÀRRECS ───────────────────────────────────────────────────────────────
-function Encargos({ trabajadores }) {
+function Encargos({ trabajadores, podeEliminar=true }) {
   const [encargos, setEncargos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modal, setModal] = useState(false);
@@ -2007,7 +2203,7 @@ function Encargos({ trabajadores }) {
   return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12}}>
-        <h2 style={{fontFamily:"Rajdhani",fontSize:24,fontWeight:700}}>Encàrrecs ☁</h2>
+        <h2 style={{fontFamily:"'DM Serif Display',serif",fontSize:24,fontWeight:700}}>Encàrrecs</h2>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button className="btn btn-ghost" style={{fontSize:12}} onClick={()=>setVistaArchivados(!vistaArchivados)}>{vistaArchivados?"📋 Veure actius":"📦 Veure arxivats"}</button>
           {!vistaArchivados&&<button className="btn btn-ghost" style={{fontSize:12}} onClick={archivarTodosCompletados}>✅ Arxivar completats</button>}
@@ -2041,7 +2237,7 @@ function Encargos({ trabajadores }) {
         </select>
         <input className="input" placeholder="🔍 Cercar..." style={{flex:1,minWidth:140,fontSize:12}} value={filtroBusqueda} onChange={e=>setFiltroBusqueda(e.target.value)} />
         {hayFiltros&&<button className="btn btn-ghost" style={{fontSize:12}} onClick={limpiarFiltros}>✕</button>}
-        <span style={{fontFamily:"Rajdhani",fontWeight:700,fontSize:14,color:COLORS.accent,whiteSpace:"nowrap"}}>{lista.length} enc.</span>
+        <span style={{fontFamily:"'DM Serif Display',serif",fontWeight:700,fontSize:14,color:COLORS.accent,whiteSpace:"nowrap"}}>{lista.length} enc.</span>
       </div>
 
       {cargando?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Carregant...</div>:(
@@ -2071,7 +2267,7 @@ function Encargos({ trabajadores }) {
                         {(e.fotos?.length>0||e.notasTrabajador)&&<button className="btn btn-ghost" style={{fontSize:11,padding:"3px 7px"}} onClick={()=>setVerDetalle(e)}>🔍</button>}
                         <button className="btn btn-ghost" style={{fontSize:11,padding:"3px 7px"}} onClick={()=>abrirEditar(e)}>✏</button>
                         <button className="btn btn-ghost" style={{fontSize:11,padding:"3px 7px"}} onClick={()=>archivar(e.id,!e.archivado)} title={e.archivado?"Restaurar":"Arxivar"}>{e.archivado?"📤":"📦"}</button>
-                        <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>
+                        {podeEliminar&&<button className="btn btn-danger" onClick={()=>setConfirmarEliminar(e)}>🗑</button>}
                       </div>
                     </div>
                   </div>
@@ -2168,10 +2364,10 @@ function Albaranes({ albaranes }) {
 
   return (
     <div>
-      <Header title="Albarans ☁" onAdd={abrirNuevo} addLabel="+ Nou albarà" />
+      <Header title="Albarans" onAdd={abrirNuevo} addLabel="+ Nou albarà" />
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
         {["Tots",...ESTADOS_ALBARAN].map(f=><button key={f} className="btn" onClick={()=>setFiltro(f)} style={{background:filtro===f?COLORS.accent:COLORS.surface,color:filtro===f?"#000":COLORS.muted,border:`1px solid ${filtro===f?COLORS.accent:COLORS.border}`,fontSize:12}}>{f}</button>)}
-        <span style={{marginLeft:"auto",alignSelf:"center",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>Total: {total.toLocaleString()}€</span>
+        <span style={{marginLeft:"auto",alignSelf:"center",fontSize:14,fontFamily:"'DM Serif Display',serif",fontWeight:700,color:COLORS.green}}>Total: {total.toLocaleString()}€</span>
       </div>
       <div className="card" style={{overflow:"hidden"}}>
         {lista.length===0?<div style={{padding:40,textAlign:"center",color:COLORS.muted}}>No hi ha albarans</div>:(
@@ -2179,11 +2375,11 @@ function Albaranes({ albaranes }) {
             <thead><tr style={{borderBottom:`1px solid ${COLORS.border}`}}>{["Número","Client","Descripció","Data","Import","Estat",""].map(h=><th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:11,color:COLORS.muted,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
             <tbody>{lista.map(a=>(
               <tr key={a.id} style={{borderBottom:`1px solid ${COLORS.border}`}}>
-                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"Rajdhani",fontWeight:600,color:COLORS.accent}}>{a.numero}</td>
+                <td style={{padding:"12px 16px",fontSize:13,fontFamily:"'DM Serif Display',serif",fontWeight:600,color:COLORS.accent}}>{a.numero}</td>
                 <td style={{padding:"12px 16px",fontSize:13,fontWeight:500}}>{a.cliente}</td>
                 <td style={{padding:"12px 16px",fontSize:12,color:COLORS.muted,maxWidth:200}}>{a.descripcion}</td>
                 <td style={{padding:"12px 16px",fontSize:13,color:COLORS.muted}}>{a.fecha}</td>
-                <td style={{padding:"12px 16px",fontSize:14,fontFamily:"Rajdhani",fontWeight:700,color:COLORS.green}}>{a.importe.toLocaleString()}€</td>
+                <td style={{padding:"12px 16px",fontSize:14,fontFamily:"'DM Serif Display',serif",fontWeight:700,color:COLORS.green}}>{a.importe.toLocaleString()}€</td>
                 <td style={{padding:"12px 16px"}}><select className="select" style={{fontSize:12,padding:"4px 8px"}} value={a.estado} onChange={ev=>cambiarEstado(a.id,ev.target.value)}>{ESTADOS_ALBARAN.map(s=><option key={s}>{s}</option>)}</select></td>
                 <td style={{padding:"12px 16px"}}><div style={{display:"flex",gap:6}}><button className="btn btn-ghost" style={{fontSize:11,padding:"4px 8px"}} onClick={()=>abrirEditar(a)}>✏</button><button className="btn btn-danger" onClick={()=>setConfirmarEliminar(a)}>🗑</button></div></td>
               </tr>
@@ -2241,7 +2437,7 @@ function Manuales({ onManualesChange }) {
 
   return (
     <div>
-      <Header title="Biblioteca de Manuals ☁" onAdd={()=>setModal(true)} addLabel="+ Afegir manual" />
+      <Header title="Biblioteca de Manuals" onAdd={()=>setModal(true)} addLabel="+ Afegir manual" />
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
         <input className="input" placeholder="🔍 Cercar..." value={buscar} onChange={e=>{setBuscar(e.target.value);setMarcaAbierta(null);setTipoAbierto(null);}} style={{maxWidth:400}} />
       </div>
@@ -2301,9 +2497,314 @@ function Manuales({ onManualesChange }) {
           </div>
           <div><label>URL</label><input className="input" placeholder="https://..." value={form.url} onChange={e=>setForm({...form,url:e.target.value})} /></div>
           <div><label>Data</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
-          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button><button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardant...":"Guardar ☁"}</button></div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button><button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardant...":"Guardar"}</button></div>
         </div>
       </Modal>}
+    </div>
+  );
+}
+
+// ─── DOCUMENTS ───────────────────────────────────────────────────────────────
+const DOCS_CATS = ["Instal·lació","Manteniment","Tècnic","Elèctric","General"];
+const CAT_COLORS_DOC = {"Instal·lació":COLORS.accent,"Manteniment":COLORS.green,"Tècnic":COLORS.warm,"Elèctric":COLORS.yellow,"General":COLORS.muted};
+
+function DocManuals({ solaLectura }) {
+  const [manuals, setManuals] = useState([]);
+  const [pujarModal, setPujarModal] = useState(false);
+  const [pujant, setPujant] = useState(false);
+  const [buscar, setBuscar] = useState("");
+  const [filtreCat, setFiltreCat] = useState("Totes");
+  const [errPujada, setErrPujada] = useState("");
+  const [form, setForm] = useState({title:"",categoria:"Instal·lació",fitxer:null});
+
+  useEffect(()=>{
+    const q=query(collection(db,"documentManuals"),orderBy("data","desc"));
+    return onSnapshot(q,snap=>setManuals(snap.docs.map(d=>({id:d.id,...d.data()}))));
+  },[]);
+
+  const pujar = async () => {
+    if(!form.title||!form.fitxer)return;
+    setPujant(true);setErrPujada("");
+    try {
+      const res = await pujarFitxerLocal(form.fitxer);
+      const host=`${window.location.protocol}//${window.location.hostname}`;
+      await addDoc(collection(db,"documentManuals"),{
+        title:form.title,categoria:form.categoria,
+        url:`${host}/documents/${res.filename}`,filename:res.filename,
+        data:new Date().toISOString().split("T")[0],
+      });
+      setPujarModal(false);setForm({title:"",categoria:"Instal·lació",fitxer:null});
+    } catch(e) { setErrPujada("Error: "+e.message); }
+    setPujant(false);
+  };
+
+  const lista = manuals
+    .filter(m=>filtreCat==="Totes"||m.categoria===filtreCat)
+    .filter(m=>!buscar||m.title.toLowerCase().includes(buscar.toLowerCase()));
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <input className="input" placeholder="🔍 Cercar manual..." value={buscar} onChange={e=>setBuscar(e.target.value)} style={{maxWidth:260,fontSize:13}} />
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          {["Totes",...DOCS_CATS].map(c=>(
+            <button key={c} className="btn" onClick={()=>setFiltreCat(c)}
+              style={{fontSize:11,padding:"5px 11px",background:filtreCat===c?COLORS.accent:COLORS.surface,color:filtreCat===c?"#fff":COLORS.muted,border:`1px solid ${filtreCat===c?COLORS.accent:COLORS.border}`}}>
+              {c}
+            </button>
+          ))}
+        </div>
+        {!solaLectura&&<button className="btn btn-primary" style={{marginLeft:"auto",fontSize:13}} onClick={()=>{setErrPujada("");setPujarModal(true);}}>+ Pujar manual</button>}
+      </div>
+      {lista.length===0
+        ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense manuals{buscar||filtreCat!=="Totes"?" amb aquests filtres":""}</div>
+        : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
+            {lista.map(m=>(
+              <div key={m.id} className="card" style={{padding:18,borderTop:`3px solid ${CAT_COLORS_DOC[m.categoria]||COLORS.muted}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <span className="badge" style={{background:`${CAT_COLORS_DOC[m.categoria]||COLORS.muted}22`,color:CAT_COLORS_DOC[m.categoria]||COLORS.muted,fontSize:10}}>{m.categoria}</span>
+                  <span style={{fontSize:11,color:COLORS.muted}}>{m.data}</span>
+                </div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:12,lineHeight:1.4}}>{m.title}</div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <a href={m.url} target="_blank" rel="noreferrer"
+                    style={{fontSize:12,color:COLORS.accent,textDecoration:"none",border:`1px solid ${COLORS.accent}33`,padding:"5px 12px",borderRadius:6}}>
+                    📥 Veure
+                  </a>
+                  {!solaLectura&&<button className="btn btn-danger" style={{padding:"5px 8px",fontSize:11}} onClick={()=>deleteDoc(doc(db,"documentManuals",m.id))}>🗑</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+      }
+      {pujarModal&&(
+        <Modal title="Pujar manual" onClose={()=>setPujarModal(false)}>
+          <div style={{display:"grid",gap:14}}>
+            <div><label>Títol *</label><input className="input" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Nom del document..." /></div>
+            <div><label>Categoria</label>
+              <select className="select" style={{width:"100%"}} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
+                {DOCS_CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label>Fitxer (PDF, imatge...)</label>
+              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={e=>setForm({...form,fitxer:e.target.files[0]||null})} style={{fontSize:13,padding:"8px 0",width:"100%"}} />
+              {form.fitxer&&<div style={{fontSize:11,color:COLORS.muted,marginTop:4}}>📎 {form.fitxer.name} ({Math.round(form.fitxer.size/1024)}KB)</div>}
+            </div>
+            {errPujada&&<div style={{fontSize:12,color:COLORS.danger,background:"#FEE2E2",padding:"8px 12px",borderRadius:6}}>{errPujada}</div>}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setPujarModal(false)}>Cancel·lar</button>
+              <button className="btn btn-primary" onClick={pujar} disabled={pujant||!form.title||!form.fitxer}>{pujant?"Pujant...":"Pujar"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function DocFotos({ hojesTreball, solaLectura }) {
+  const [filtreFull, setFiltreFull] = useState("");
+  const [lightbox, setLightbox] = useState(null);
+  const [lightboxFotos, setLightboxFotos] = useState([]);
+  const [pujant, setPujant] = useState(false);
+  const [fullPujar, setFullPujar] = useState("");
+
+  const allFotos = hojesTreball.flatMap(h=>(h.fotos||[]).map(url=>({url,fullId:h.id,client:h.client||"",data:h.data||"",numero:h.numero||""})));
+  const lista = filtreFull ? allFotos.filter(f=>f.fullId===filtreFull) : allFotos;
+
+  const pujarFoto = async (arxius) => {
+    if(!fullPujar){alert("Selecciona primer un full de treball");return;}
+    setPujant(true);
+    const hoja=hojesTreball.find(h=>h.id===fullPujar);
+    const noves=[...(hoja?.fotos||[])];
+    for(const a of arxius){try{noves.push(await subirFoto(a));}catch(e){console.error(e);}}
+    await updateDoc(doc(db,"hojesTreball",fullPujar),{fotos:noves});
+    setPujant(false);
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <select className="select" value={filtreFull} onChange={e=>setFiltreFull(e.target.value)} style={{minWidth:220,fontSize:13}}>
+          <option value="">Totes les fotos ({allFotos.length})</option>
+          {hojesTreball.filter(h=>(h.fotos||[]).length>0).map(h=>(
+            <option key={h.id} value={h.id}>{h.client||"Sense client"} — {h.data}{h.numero?` #${h.numero}`:""}</option>
+          ))}
+        </select>
+        {!solaLectura&&<>
+          <select className="select" value={fullPujar} onChange={e=>setFullPujar(e.target.value)} style={{minWidth:220,fontSize:13}}>
+            <option value="">Selecciona full per pujar foto...</option>
+            {hojesTreball.map(h=><option key={h.id} value={h.id}>{h.client||"Sense client"} — {h.data}{h.numero?` #${h.numero}`:""}</option>)}
+          </select>
+          <label className="btn btn-primary" style={{cursor:"pointer",fontSize:13,margin:0}}>
+            {pujant?"Pujant...":"📷 Pujar foto"}
+            <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>e.target.files.length&&pujarFoto(Array.from(e.target.files))} disabled={pujant} />
+          </label>
+        </>}
+        <span style={{marginLeft:"auto",fontSize:13,color:COLORS.muted}}>{lista.length} foto{lista.length!==1?"s":""}</span>
+      </div>
+      {lista.length===0
+        ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense fotos</div>
+        : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
+            {lista.map((f,i)=>(
+              <div key={i} className="card" style={{padding:6,cursor:"pointer"}} onClick={()=>{setLightboxFotos(lista.map(x=>x.url));setLightbox(i);}}>
+                <img src={f.url} alt="" style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8}} />
+                <div style={{fontSize:10,color:COLORS.muted,marginTop:5,padding:"0 3px",lineHeight:1.4}}>{f.client}<br/>{f.data}</div>
+              </div>
+            ))}
+          </div>
+      }
+      {lightbox!==null&&<Lightbox fotos={lightboxFotos} indice={lightbox} onClose={()=>setLightbox(null)} />}
+    </div>
+  );
+}
+
+function DocAlbarans({ albaranes }) {
+  const [buscar, setBuscar] = useState("");
+  const [filtreEstat, setFiltreEstat] = useState("Tots");
+  const [detall, setDetall] = useState(null);
+
+  const lista = albaranes
+    .filter(a=>filtreEstat==="Tots"||a.estado===filtreEstat)
+    .filter(a=>!buscar||a.cliente?.toLowerCase().includes(buscar.toLowerCase())||a.numero?.toLowerCase().includes(buscar.toLowerCase()));
+  const total = lista.reduce((s,a)=>s+(a.importe||0),0);
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <input className="input" placeholder="🔍 Client o número..." value={buscar} onChange={e=>setBuscar(e.target.value)} style={{maxWidth:240,fontSize:13}} />
+        {["Tots",...ESTADOS_ALBARAN].map(f=>(
+          <button key={f} className="btn" onClick={()=>setFiltreEstat(f)}
+            style={{fontSize:12,padding:"5px 12px",background:filtreEstat===f?COLORS.accent:COLORS.surface,color:filtreEstat===f?"#fff":COLORS.muted,border:`1px solid ${filtreEstat===f?COLORS.accent:COLORS.border}`}}>
+            {f}
+          </button>
+        ))}
+        <span style={{marginLeft:"auto",fontFamily:"'DM Serif Display',serif",fontSize:18,color:COLORS.green}}>{total.toLocaleString()}€</span>
+      </div>
+      <div style={{display:"grid",gap:8}}>
+        {lista.length===0
+          ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense albarans</div>
+          : lista.map(a=>(
+              <div key={a.id} className="card" style={{padding:14,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:15,color:COLORS.accent,minWidth:130}}>{a.numero}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:14}}>{a.cliente}</div>
+                  <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>{a.fecha}{a.descripcion?` · ${a.descripcion.substring(0,50)}`:""}</div>
+                </div>
+                <EstadoBadge estado={a.estado} />
+                <span style={{fontFamily:"'DM Serif Display',serif",fontSize:16,color:COLORS.green}}>{(a.importe||0).toLocaleString()}€</span>
+                <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 10px"}} onClick={()=>setDetall(a)}>Veure</button>
+              </div>
+            ))
+        }
+      </div>
+      {detall&&(
+        <Modal title={`Albarà ${detall.numero}`} onClose={()=>setDetall(null)}>
+          <div style={{display:"grid",gap:14}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div><label>Client</label><div style={{fontWeight:600,fontSize:15}}>{detall.cliente}</div></div>
+              <div><label>Data</label><div style={{fontSize:14}}>{detall.fecha}</div></div>
+            </div>
+            {detall.descripcion&&<div><label>Descripció</label><div style={{fontSize:13}}>{detall.descripcion}</div></div>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div><label>Import</label><div style={{fontFamily:"'DM Serif Display',serif",fontSize:26,color:COLORS.green}}>{(detall.importe||0).toLocaleString()}€</div></div>
+              <div><label>Estat</label><div style={{marginTop:6}}><EstadoBadge estado={detall.estado}/></div></div>
+            </div>
+            <div style={{display:"flex",justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setDetall(null)}>Tancar</button></div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function DocFulls({ hojesTreball, trabajadores }) {
+  const [buscar, setBuscar] = useState("");
+  const [filtreTreb, setFiltreTreb] = useState("");
+  const [filtreEstat, setFiltreEstat] = useState("Tots");
+  const [generant, setGenerant] = useState(null);
+
+  const lista = hojesTreball
+    .filter(h=>filtreEstat==="Tots"||h.estat===filtreEstat)
+    .filter(h=>!filtreTreb||(Array.isArray(h.operaris)?h.operaris:[]).includes(filtreTreb))
+    .filter(h=>!buscar||h.client?.toLowerCase().includes(buscar.toLowerCase())||h.numero?.includes(buscar));
+
+  const descarregar = async (hoja) => {
+    setGenerant(hoja.id);
+    const pdf = await generarPDFHojaTreball(hoja);
+    pdf.save(`full_${hoja.numero||hoja.id}_${hoja.client||"client"}.pdf`);
+    setGenerant(null);
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <input className="input" placeholder="🔍 Client o número..." value={buscar} onChange={e=>setBuscar(e.target.value)} style={{maxWidth:220,fontSize:13}} />
+        <select className="select" value={filtreTreb} onChange={e=>setFiltreTreb(e.target.value)} style={{fontSize:13}}>
+          <option value="">Tots els treballadors</option>
+          {trabajadores.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+        </select>
+        {["Tots","Pendent","Signat","Enviat"].map(f=>(
+          <button key={f} className="btn" onClick={()=>setFiltreEstat(f)}
+            style={{fontSize:11,padding:"5px 11px",background:filtreEstat===f?COLORS.accent:COLORS.surface,color:filtreEstat===f?"#fff":COLORS.muted,border:`1px solid ${filtreEstat===f?COLORS.accent:COLORS.border}`}}>
+            {f}
+          </button>
+        ))}
+        <span style={{marginLeft:"auto",fontSize:13,color:COLORS.muted}}>{lista.length} fulls</span>
+      </div>
+      <div style={{display:"grid",gap:8}}>
+        {lista.length===0
+          ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense fulls</div>
+          : lista.map(h=>(
+              <div key={h.id} className="card" style={{padding:14,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
+                    <EstadoBadge estado={h.estat||"Pendent"} />
+                    {h.numero&&<span style={{fontFamily:"'DM Serif Display',serif",color:COLORS.accent,fontSize:14}}>#{h.numero}</span>}
+                    {h.signatura&&<span className="badge" style={{background:"rgba(22,163,74,.15)",color:COLORS.green,fontSize:10}}>✅ Signat</span>}
+                  </div>
+                  <div style={{fontWeight:600,fontSize:14}}>{h.client||"Sense client"}</div>
+                  <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>
+                    {h.data}{h.poblacio?` · ${h.poblacio}`:""}
+                    {Array.isArray(h.operaris)&&h.operaris.length>0?` · 👷 ${h.operaris.join(", ")}`:""}
+                  </div>
+                </div>
+                <button className="btn btn-ghost" style={{fontSize:12,padding:"6px 12px"}} onClick={()=>descarregar(h)} disabled={generant===h.id}>
+                  {generant===h.id?"...":"📄 PDF"}
+                </button>
+              </div>
+            ))
+        }
+      </div>
+    </div>
+  );
+}
+
+function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="manuals" }) {
+  const [tab, setTab] = useState(initialTab);
+  const TABS = [
+    {id:"manuals",  label:"Manuals",  icon:"📋"},
+    {id:"fotos",    label:"Fotos",    icon:"📷"},
+    {id:"albarans", label:"Albarans", icon:"🧾"},
+    {id:"fulls",    label:"Fulls",    icon:"📄"},
+  ];
+  return (
+    <div>
+      <div style={{display:"flex",gap:4,marginBottom:20,background:"#fff",borderRadius:12,padding:6,border:`1px solid ${COLORS.border}`,width:"fit-content"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,
+            fontFamily:"'DM Sans',sans-serif",fontWeight:500,transition:"all .15s",
+            background:tab===t.id?COLORS.accent:"transparent",
+            color:tab===t.id?"#fff":COLORS.muted
+          }}>{t.icon} {t.label}</button>
+        ))}
+      </div>
+      {tab==="manuals"  && <DocManuals solaLectura={solaLectura} />}
+      {tab==="fotos"    && <DocFotos hojesTreball={hojesTreball} solaLectura={solaLectura} />}
+      {tab==="albarans" && <DocAlbarans albaranes={albaranes} />}
+      {tab==="fulls"    && <DocFulls hojesTreball={hojesTreball} trabajadores={trabajadores} />}
     </div>
   );
 }
@@ -2434,6 +2935,68 @@ function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajado
   );
 }
 
+// ─── VISTA ENCARREGAT ─────────────────────────────────────────────────────────
+function VistaEncarregat({ usuarioInfo, fichajes, encargos, albaranes, trabajadores, hojesTreball }) {
+  const SECCIONS = ["dashboard","trabajadores","fichajes","encargos","hojesTreball","documents"];
+  const navItems = NAV_ITEMS.filter(i=>SECCIONS.includes(i.id));
+  const [section, setSection] = useState("dashboard");
+  return (
+    <>
+      <style>{STYLE}</style>
+      <div style={{display:"flex",minHeight:"100vh"}}>
+        <div style={{width:220,background:"#fff",borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",flexShrink:0,position:"sticky",top:0,height:"100vh"}}>
+          <div style={{padding:"28px 24px 20px",borderBottom:`1px solid ${COLORS.border}`}}>
+            <img src={NOUAIRE_LOGO} alt="Nouaire" style={{height:30,maxWidth:"100%"}} />
+            <div style={{fontSize:10,color:COLORS.muted,marginTop:8,letterSpacing:"0.8px",textTransform:"uppercase",fontWeight:500}}>Encarregat</div>
+          </div>
+          <nav style={{padding:"16px 12px",flex:1,display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
+            {navItems.map(item=>(
+              <button key={item.id} onClick={()=>setSection(item.id)}
+                style={{width:"100%",background:section===item.id?COLORS.accentLight:"transparent",
+                  borderRadius:8,border:"none",color:section===item.id?COLORS.accent:COLORS.muted,
+                  padding:"10px 12px",textAlign:"left",cursor:"pointer",fontSize:13,
+                  fontFamily:"'DM Sans',sans-serif",fontWeight:section===item.id?500:400,
+                  display:"flex",alignItems:"center",gap:10,transition:"all .15s"}}>
+                <span style={{fontSize:14,width:18,textAlign:"center",opacity:0.7}}>{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <div style={{padding:"16px 20px",borderTop:`1px solid ${COLORS.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:COLORS.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:600,color:COLORS.accent,flexShrink:0}}>
+                {(usuarioInfo?.nombre||"E").charAt(0).toUpperCase()}
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:500,color:COLORS.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{usuarioInfo?.nombre||"Encarregat"}</div>
+                <div style={{fontSize:11,color:COLORS.muted}}>Encarregat</div>
+              </div>
+              <NotificacionsAdmin />
+            </div>
+            <button className="btn btn-ghost" style={{width:"100%",fontSize:12}} onClick={()=>signOut(auth)}>Tancar sessió</button>
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",maxHeight:"100vh",background:COLORS.bg}}>
+          <div style={{padding:"36px 40px",maxWidth:1100}}>
+            <div style={{marginBottom:28}}>
+              <h2 className="page-title">{NAV_ITEMS.find(i=>i.id===section)?.label||"Inici"}</h2>
+              <div style={{fontSize:13,color:COLORS.muted,marginTop:4,fontWeight:300}}>
+                {new Date().toLocaleDateString("ca-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+              </div>
+            </div>
+            {section==="dashboard"   && <Dashboard encargos={encargos} fichajes={fichajes} trabajadores={trabajadores} albaranes={albaranes} hojesTreball={hojesTreball}/>}
+            {section==="trabajadores"&& <Trabajadores trabajadores={trabajadores} cargandoT={false} hojesTreball={hojesTreball} podeEliminar={false}/>}
+            {section==="fichajes"    && <Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
+            {section==="encargos"    && <Encargos trabajadores={trabajadores} podeEliminar={false}/>}
+            {section==="hojesTreball"&& <HojesTreball trabajadores={trabajadores} encargos={encargos} podeAprovar={true}/>}
+            {section==="documents"   && <Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes}/>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }) {
   const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
@@ -2509,14 +3072,15 @@ function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }
 }
 
 const NAV_ITEMS = [
-  {id:"dashboard",label:"Inici",icon:"◻"},
-  {id:"usuarios",label:"Usuaris",icon:"◈"},
-  {id:"trabajadores",label:"Treballadors",icon:"◉"},
-  {id:"fichajes",label:"Control Horari",icon:"◷"},
-  {id:"encargos",label:"Encàrrecs",icon:"◈"},
-  {id:"hojesTreball",label:"Fulls de Treball",icon:"◧"},
-  {id:"albaranes",label:"Albarans",icon:"◩"},
-  {id:"manuales",label:"Manuals",icon:"◪",adminUrl:"http://192.168.1.75:8080"},
+  {id:"dashboard",   label:"Inici",           icon:"🏠"},
+  {id:"usuarios",    label:"Usuaris",          icon:"👥"},
+  {id:"trabajadores",label:"Treballadors",     icon:"👷"},
+  {id:"fichajes",    label:"Control Horari",   icon:"🕐"},
+  {id:"encargos",    label:"Encàrrecs",        icon:"📋"},
+  {id:"hojesTreball",label:"Fulls de Treball", icon:"📄"},
+  {id:"albaranes",   label:"Albarans",         icon:"🧾"},
+  {id:"documents",   label:"Documents",        icon:"📁"},
+  {id:"manuales",    label:"Manuals",          icon:"📚",adminUrl:"http://192.168.1.75:8080"},
 ];
 
 export default function App() {
@@ -2550,7 +3114,8 @@ export default function App() {
       <button className="btn btn-danger" onClick={()=>signOut(auth)}>Tancar sessió</button>
     </div>
   );
-  if(usuarioInfo?.rol==="trabajador") return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} />;
+  if(usuarioInfo?.rol==="trabajador")  return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} />;
+  if(usuarioInfo?.rol==="encarregat") return <VistaEncarregat usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
   if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} onManualesChange={setManuales} />;
 
   const pendentsCount = hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length;
@@ -2616,6 +3181,7 @@ export default function App() {
             {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
             {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
             {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
+            {section==="documents"&&<Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes}/>}
           </div>
         </div>
       </div>
