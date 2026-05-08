@@ -1553,7 +1553,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
           <FormHojaTreball
             hoja={editantFull}
             onClose={()=>setMostrarFormFull(false)}
-            trabajadores={trabajadores}
+            trabajadores={trabajadores?.filter(t => t.estado === "Actiu") || []}
             encargos={encargos}
             materialsHistorial={materialsHistorial}
             isWorker={usuarioInfo.nombre}
