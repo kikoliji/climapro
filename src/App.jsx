@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { db, auth } from "./firebase";
 import {
   collection, addDoc, onSnapshot, orderBy, query,
-  deleteDoc, doc, updateDoc, setDoc, getDoc, runTransaction
+  deleteDoc, doc, updateDoc, setDoc, getDoc, runTransaction, serverTimestamp
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
@@ -10,7 +10,6 @@ import {
 } from "firebase/auth";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import axios from "axios";
 import * as XLSX from "xlsx";
 
 const COLORS = {
@@ -19,7 +18,7 @@ const COLORS = {
   accentLight: "#E8F4EE",
   warm: "#C8601A", warmLight: "#FFF0E6",
   green: "#16A34A", yellow: "#D97706",
-  text: "#1A1A18", muted: "#888880", danger: "#C8601A",
+  text: "#1A1A18", muted: "#888880",
   blue: "#2952A3", blueLight: "#EBF0FB",
 };
 
@@ -49,7 +48,7 @@ const STYLE = `
   .btn-primary:hover { background:${COLORS.accentDim}; transform:translateY(-1px); box-shadow:0 4px 14px rgba(45,106,79,0.3); }
   .btn-ghost { background:transparent; color:${COLORS.muted}; border:1px solid ${COLORS.border}; }
   .btn-ghost:hover { border-color:${COLORS.accent}; color:${COLORS.accent}; }
-  .btn-danger { background:transparent; color:${COLORS.danger}; border:1px solid rgba(200,96,26,0.25); font-size:12px; padding:5px 10px; }
+  .btn-danger { background:transparent; color:${COLORS.warm}; border:1px solid rgba(200,96,26,0.25); font-size:12px; padding:5px 10px; }
   .btn-danger:hover { background:rgba(200,96,26,0.08); }
   .input { background:#fff; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:10px 13px; font-size:13px; font-family:'DM Sans',sans-serif; width:100%; outline:none; transition:border .2s,box-shadow .2s; }
   .input:focus { border-color:${COLORS.accent}; box-shadow:0 0 0 3px rgba(45,106,79,0.08); }
@@ -76,8 +75,8 @@ function calcHoras(entrada, salida) {
   if (!entrada || !salida) return "-";
   const [h1, m1] = entrada.split(":").map(Number);
   const [h2, m2] = salida.split(":").map(Number);
-  const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
-  if (mins < 0) return "-";
+  let mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (mins < 0) mins += 1440;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
@@ -85,8 +84,8 @@ function calcMinutos(entrada, salida) {
   if (!entrada || !salida) return 0;
   const [h1, m1] = entrada.split(":").map(Number);
   const [h2, m2] = salida.split(":").map(Number);
-  const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
-  return mins > 0 ? mins : 0;
+  let mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+  return mins < 0 ? mins + 1440 : mins;
 }
 
 function horaActual() {
@@ -100,7 +99,7 @@ function obtenerUbicacion() {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, precision: Math.round(pos.coords.accuracy) }),
       () => resolve(null),
-      { timeout: 8000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: true }
     );
   });
 }
@@ -160,8 +159,10 @@ async function subirFoto(archivo) {
   const formData = new FormData();
   formData.append("file", archivo);
   formData.append("upload_preset", CLOUDINARY_PRESET);
-  const res = await axios.post(CLOUDINARY_URL, formData);
-  return res.data.secure_url;
+  const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
+  if (!res.ok) throw new Error(`Cloudinary error ${res.status}`);
+  const data = await res.json();
+  return data.secure_url;
 }
 
 async function pujarFitxerLocal(archivo) {
@@ -427,7 +428,7 @@ function Login() {
           <div style={{ display:"grid", gap:16 }}>
             <div><label>Email</label><input className="input" type="email" placeholder="tu@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
             <div><label>Contrasenya</label><input className="input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} /></div>
-            {error && <div style={{ fontSize:13, color:COLORS.danger, background:"#FEE2E2", padding:"10px 14px", borderRadius:8 }}>{error}</div>}
+            {error && <div style={{ fontSize:13, color:COLORS.warm, background:"#FEE2E2", padding:"10px 14px", borderRadius:8 }}>{error}</div>}
             <button className="btn btn-primary" onClick={handleLogin} disabled={cargando} style={{ width:"100%", padding:"13px", fontSize:14, borderRadius:10, marginTop:4 }}>
               {cargando ? "Entrant..." : "Entrar"}
             </button>
@@ -603,7 +604,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
       await updateDoc(doc(db,"hojesTreball",hojaId), dades);
     } else {
       dades.numero = await generarNumeroFullTreball();
-      const ref = await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: new Date().toISOString() });
+      const ref = await addDoc(collection(db,"hojesTreball"), { ...dades, createdAt: serverTimestamp() });
       hojaId = ref.id;
       // Crear albarà automàtic
       const numeroAlbara = await generarNumeroAlbara();
@@ -1017,7 +1018,7 @@ function HojesTreball({ trabajadores, encargos, podeAprovar=false }) {
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
             <button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button>
-            <button className="btn" style={{ background:COLORS.danger, color:"#fff" }} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button>
+            <button className="btn" style={{ background:COLORS.warm, color:"#fff" }} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button>
           </div>
         </Modal>
       )}
@@ -1087,7 +1088,7 @@ function GestionarEncargo({ encargo, onClose }) {
                 {fotos.map((url,i)=>(
                   <div key={i} style={{ position:"relative" }}>
                     <img src={url} alt="" className="foto-thumb" onClick={()=>setLightbox(i)} style={{ width:80, height:80, objectFit:"cover", borderRadius:8, border:`2px solid ${COLORS.border}` }} />
-                    <button onClick={()=>setFotos(fotos.filter((_,j)=>j!==i))} style={{ position:"absolute", top:-6, right:-6, background:COLORS.danger, border:"none", borderRadius:"50%", width:20, height:20, cursor:"pointer", color:"#fff", fontSize:10, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                    <button onClick={()=>setFotos(fotos.filter((_,j)=>j!==i))} style={{ position:"absolute", top:-6, right:-6, background:COLORS.warm, border:"none", borderRadius:"50%", width:20, height:20, cursor:"pointer", color:"#fff", fontSize:10, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
                   </div>
                 ))}
               </div>
@@ -1142,7 +1143,7 @@ function ResumSetmanal({ nom, fichajes }) {
           let borderColor = COLORS.border;
           if (esAvui) borderColor = COLORS.accent;
           else if (pocesHores) borderColor = COLORS.yellow;
-          else if (senseFitxar && !esFutur) borderColor = COLORS.danger;
+          else if (senseFitxar && !esFutur) borderColor = COLORS.warm;
           else if (mins >= 480) borderColor = COLORS.green;
           return (
             <div key={dia} style={{ textAlign:"center", padding:"10px 6px", borderRadius:10, border:`1px solid ${borderColor}`, background: esAvui?"rgba(0,196,255,.07)":COLORS.surface, position:"relative" }}>
@@ -1151,7 +1152,7 @@ function ResumSetmanal({ nom, fichajes }) {
               {esFutur ? (
                 <div style={{ fontSize:12, color:COLORS.muted }}>—</div>
               ) : mins === 0 ? (
-                <div style={{ fontSize:11, color:COLORS.danger }}>⚠ 0h</div>
+                <div style={{ fontSize:11, color:COLORS.warm }}>⚠ 0h</div>
               ) : (
                 <div style={{ fontSize:13, fontWeight:700, color: mins>=480?COLORS.green:COLORS.yellow, fontFamily:"'DM Serif Display',serif" }}>
                   {Math.floor(mins/60)}h{mins%60>0?` ${mins%60}m`:""}
@@ -1165,7 +1166,7 @@ function ResumSetmanal({ nom, fichajes }) {
       <div style={{ display:"flex", gap:16, marginTop:12, flexWrap:"wrap" }}>
         <span style={{ fontSize:11, color:COLORS.green }}>● ≥8h</span>
         <span style={{ fontSize:11, color:COLORS.yellow }}>● &lt;8h</span>
-        <span style={{ fontSize:11, color:COLORS.danger }}>● Sense fitxar</span>
+        <span style={{ fontSize:11, color:COLORS.warm }}>● Sense fitxar</span>
         <span style={{ fontSize:11, color:COLORS.accent }}>● Avui</span>
       </div>
     </div>
@@ -1516,12 +1517,6 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
           }
         </div>
 
-        {/* MANUALS (lectura) */}
-        <div className="card" style={{ padding:20, marginBottom:20 }}>
-          <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:18, fontWeight:400, marginBottom:16 }}>📁 Manuals tècnics</div>
-          <DocManuals solaLectura={true} />
-        </div>
-
         {/* HISTORIAL */}
         <div className="card" style={{ padding:20 }}>
           <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:16, marginBottom:16, color:COLORS.accent }}>⏱ Els meus últims dies</div>
@@ -1696,7 +1691,7 @@ function GestionUsuarios({ trabajadores }) {
         </div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
           <button className="btn btn-ghost" onClick={()=>setConfirmarEliminarUsuari(null)}>Cancel·lar</button>
-          <button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>{deleteDoc(doc(db,"usuarios",confirmarEliminarUsuari.id));setConfirmarEliminarUsuari(null);}}>Sí, eliminar</button>
+          <button className="btn" style={{background:COLORS.warm,color:"#fff"}} onClick={()=>{deleteDoc(doc(db,"usuarios",confirmarEliminarUsuari.id));setConfirmarEliminarUsuari(null);}}>Sí, eliminar</button>
         </div>
       </Modal>}
       {modal&&<Modal title="Crear usuari" onClose={()=>setModal(false)}>
@@ -1736,7 +1731,7 @@ function GestionUsuarios({ trabajadores }) {
               </div>
             </div>
           )}
-          {error&&<div style={{ fontSize:13, color:COLORS.danger }}>{error}</div>}
+          {error&&<div style={{ fontSize:13, color:COLORS.warm }}>{error}</div>}
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button>
             <button className="btn btn-primary" onClick={crearUsuario} disabled={guardando}>{guardando?"Creant...":"Crear usuari"}</button>
@@ -2002,7 +1997,7 @@ function Trabajadores({ trabajadores, cargandoT, hojesTreball=[], podeEliminar=t
       </Modal>}
       {confirmarEliminar&&<Modal title="Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.nombre}</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.warm,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
@@ -2107,7 +2102,7 @@ function Fichajes({ trabajadores, fichajes }) {
       </Modal>}
       {confirmarEliminar&&<Modal title="Eliminar tram?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.trabajador} — {confirmarEliminar.fecha}</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.warm,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
       {modal&&<Modal title="Registrar Fitxatge" onClose={()=>setModal(false)}>
         <div style={{display:"grid",gap:16}}>
@@ -2216,8 +2211,8 @@ function Encargos({ trabajadores, podeEliminar=true }) {
       </div>
 
       {resultadoImport&&(
-        <div style={{marginBottom:12,padding:12,borderRadius:10,background:resultadoImport.error?"rgba(255,71,87,.1)":"rgba(0,230,118,.1)",border:`1px solid ${resultadoImport.error?COLORS.danger:COLORS.green}`}}>
-          {resultadoImport.error?<span style={{color:COLORS.danger,fontSize:13}}>❌ {resultadoImport.error}</span>:<span style={{color:COLORS.green,fontSize:13}}>✅ {resultadoImport.importados} importats · {resultadoImport.saltados} saltats</span>}
+        <div style={{marginBottom:12,padding:12,borderRadius:10,background:resultadoImport.error?"rgba(255,71,87,.1)":"rgba(0,230,118,.1)",border:`1px solid ${resultadoImport.error?COLORS.warm:COLORS.green}`}}>
+          {resultadoImport.error?<span style={{color:COLORS.warm,fontSize:13}}>❌ {resultadoImport.error}</span>:<span style={{color:COLORS.green,fontSize:13}}>✅ {resultadoImport.importados} importats · {resultadoImport.saltados} saltats</span>}
           <button className="btn btn-ghost" style={{fontSize:11,padding:"2px 8px",marginLeft:12}} onClick={()=>setResultadoImport(null)}>✕</button>
         </div>
       )}
@@ -2338,7 +2333,7 @@ function Encargos({ trabajadores, podeEliminar=true }) {
       </Modal>}
       {confirmarEliminar&&<Modal title="Eliminar encàrrec?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.warm,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
@@ -2407,98 +2402,7 @@ function Albaranes({ albaranes }) {
       </Modal>}
       {confirmarEliminar&&<Modal title="Eliminar albarà?" onClose={()=>setConfirmarEliminar(null)}>
         <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.numero} — {confirmarEliminar.cliente}</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
-      </Modal>}
-    </div>
-  );
-}
-
-// ─── MANUALES ────────────────────────────────────────────────────────────────
-function Manuales({ onManualesChange }) {
-  const [manuales, setManuales] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [modal, setModal] = useState(false);
-  const [guardando, setGuardando] = useState(false);
-  const [buscar, setBuscar] = useState("");
-  const [confirmarEliminar, setConfirmarEliminar] = useState(null);
-  const [marcaAbierta, setMarcaAbierta] = useState(null);
-  const [tipoAbierto, setTipoAbierto] = useState(null);
-  const [form, setForm] = useState({titulo:"",marca:"",tipo:"Instal·lació",url:"",fecha:new Date().toISOString().split("T")[0]});
-
-  useEffect(()=>{ const q=query(collection(db,"manuales"),orderBy("fecha","desc")); return onSnapshot(q,snap=>{const d=snap.docs.map(x=>({id:x.id,...x.data()}));setManuales(d);onManualesChange(d);setCargando(false);}); },[]);
-
-  const guardar=async()=>{if(!form.titulo||!form.marca)return;setGuardando(true);await addDoc(collection(db,"manuales"),form);setGuardando(false);setModal(false);setForm({titulo:"",marca:"",tipo:"Instal·lació",url:"",fecha:new Date().toISOString().split("T")[0]});};
-  const eliminar=async(id)=>{await deleteDoc(doc(db,"manuales",id));setConfirmarEliminar(null);};
-  const tipoColor={"Instal·lació":COLORS.accent,Manteniment:COLORS.green,Tècnic:COLORS.warm,Protocol:COLORS.yellow,Altre:COLORS.muted};
-  const porMarca={};
-  const lf=buscar?manuales.filter(m=>m.titulo.toLowerCase().includes(buscar.toLowerCase())||m.marca.toLowerCase().includes(buscar.toLowerCase())):manuales;
-  lf.forEach(m=>{if(!porMarca[m.marca])porMarca[m.marca]={};if(!porMarca[m.marca][m.tipo])porMarca[m.marca][m.tipo]=[];porMarca[m.marca][m.tipo].push(m);});
-  const marcas=Object.keys(porMarca).sort();
-
-  return (
-    <div>
-      <Header title="Biblioteca de Manuals" onAdd={()=>setModal(true)} addLabel="+ Afegir manual" />
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-        <input className="input" placeholder="🔍 Cercar..." value={buscar} onChange={e=>{setBuscar(e.target.value);setMarcaAbierta(null);setTipoAbierto(null);}} style={{maxWidth:400}} />
-      </div>
-      {cargando?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>Carregant...</div>:marcas.length===0?<div style={{color:COLORS.muted,textAlign:"center",padding:40}}>{buscar?"Sense resultats":"Afegeix el primer manual"}</div>:buscar?(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
-          {lf.map(m=><div key={m.id} className="card" style={{padding:18,borderTop:`3px solid ${tipoColor[m.tipo]||COLORS.muted}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span className="badge" style={{background:`${tipoColor[m.tipo]||COLORS.muted}22`,color:tipoColor[m.tipo]||COLORS.muted}}>{m.tipo}</span><span style={{fontSize:11,color:COLORS.muted}}>{m.marca}</span></div>
-            <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>{m.titulo}</div>
-            <div style={{display:"flex",gap:8}}>
-              {m.url&&m.url!=="#"&&<a href={m.url} target="_blank" rel="noreferrer" style={{fontSize:12,color:COLORS.accent,textDecoration:"none",border:`1px solid ${COLORS.accent}33`,padding:"5px 12px",borderRadius:6}}>📥 Veure</a>}
-              <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(m)}>🗑</button>
-            </div>
-          </div>)}
-        </div>
-      ):(
-        <div className="card" style={{padding:8}}>
-          {marcas.map(marca=>{
-            const mo=marcaAbierta===marca;const tipus=Object.keys(porMarca[marca]).sort();const tot=Object.values(porMarca[marca]).reduce((s,a)=>s+a.length,0);
-            return <div key={marca}>
-              <div className="folder-row" onClick={()=>{setMarcaAbierta(mo?null:marca);setTipoAbierto(null);}}>
-                <span style={{fontSize:18}}>{mo?"📂":"📁"}</span><span style={{fontWeight:600,fontSize:14,flex:1}}>{marca}</span>
-                <span style={{fontSize:12,color:COLORS.muted}}>{tot} manual{tot!==1?"s":""}</span><span style={{color:COLORS.muted,fontSize:12,marginLeft:8}}>{mo?"▲":"▼"}</span>
-              </div>
-              {mo&&<div style={{paddingLeft:24}}>{tipus.map(tipus=>{
-                const to=tipoAbierto===`${marca}-${tipus}`;const items=porMarca[marca][tipus];
-                return <div key={tipus}>
-                  <div className="folder-row" onClick={()=>setTipoAbierto(to?null:`${marca}-${tipus}`)}>
-                    <span style={{fontSize:16}}>{to?"📂":"📁"}</span><span style={{fontSize:13,flex:1,color:tipoColor[tipus]||COLORS.muted}}>{tipus}</span>
-                    <span style={{fontSize:12,color:COLORS.muted}}>{items.length} manual{items.length!==1?"s":""}</span><span style={{color:COLORS.muted,fontSize:12,marginLeft:8}}>{to?"▲":"▼"}</span>
-                  </div>
-                  {to&&<div style={{paddingLeft:24}}>{items.map(m=>(
-                    <div key={m.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderRadius:8,borderBottom:`1px solid ${COLORS.border}`}}>
-                      <span style={{fontSize:16}}>📄</span>
-                      <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500}}>{m.titulo}</div><div style={{fontSize:11,color:COLORS.muted,marginTop:2}}>{m.fecha}</div></div>
-                      <div style={{display:"flex",gap:8}}>
-                        {m.url&&m.url!=="#"&&<a href={m.url} target="_blank" rel="noreferrer" style={{fontSize:12,color:COLORS.accent,textDecoration:"none",border:`1px solid ${COLORS.accent}33`,padding:"4px 10px",borderRadius:6}}>📥 Veure</a>}
-                        <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(m)}>🗑</button>
-                      </div>
-                    </div>
-                  ))}</div>}
-                </div>;
-              })}</div>}
-            </div>;
-          })}
-        </div>
-      )}
-      {confirmarEliminar&&<Modal title="Eliminar?" onClose={()=>setConfirmarEliminar(null)}>
-        <div style={{marginBottom:20}}><div style={{fontSize:15,fontWeight:600,color:COLORS.accent}}>{confirmarEliminar.titulo}</div></div>
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.danger,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
-      </Modal>}
-      {modal&&<Modal title="Afegir Manual" onClose={()=>setModal(false)}>
-        <div style={{display:"grid",gap:14}}>
-          <div><label>Títol *</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div><label>Marca *</label><input className="input" value={form.marca} onChange={e=>setForm({...form,marca:e.target.value})} /></div>
-            <div><label>Tipus</label><select className="select" style={{width:"100%"}} value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value})}>{"Instal·lació,Manteniment,Tècnic,Protocol,Altre".split(",").map(t=><option key={t}>{t}</option>)}</select></div>
-          </div>
-          <div><label>URL</label><input className="input" placeholder="https://..." value={form.url} onChange={e=>setForm({...form,url:e.target.value})} /></div>
-          <div><label>Data</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
-          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button><button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardant...":"Guardar"}</button></div>
-        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><button className="btn btn-ghost" onClick={()=>setConfirmarEliminar(null)}>Cancel·lar</button><button className="btn" style={{background:COLORS.warm,color:"#fff"}} onClick={()=>eliminar(confirmarEliminar.id)}>Sí, eliminar</button></div>
       </Modal>}
     </div>
   );
@@ -2508,100 +2412,6 @@ function Manuales({ onManualesChange }) {
 const DOCS_CATS = ["Instal·lació","Manteniment","Tècnic","Elèctric","General"];
 const CAT_COLORS_DOC = {"Instal·lació":COLORS.accent,"Manteniment":COLORS.green,"Tècnic":COLORS.warm,"Elèctric":COLORS.yellow,"General":COLORS.muted};
 
-function DocManuals({ solaLectura }) {
-  const [manuals, setManuals] = useState([]);
-  const [pujarModal, setPujarModal] = useState(false);
-  const [pujant, setPujant] = useState(false);
-  const [buscar, setBuscar] = useState("");
-  const [filtreCat, setFiltreCat] = useState("Totes");
-  const [errPujada, setErrPujada] = useState("");
-  const [form, setForm] = useState({title:"",categoria:"Instal·lació",fitxer:null});
-
-  useEffect(()=>{
-    const q=query(collection(db,"documentManuals"),orderBy("data","desc"));
-    return onSnapshot(q,snap=>setManuals(snap.docs.map(d=>({id:d.id,...d.data()}))));
-  },[]);
-
-  const pujar = async () => {
-    if(!form.title||!form.fitxer)return;
-    setPujant(true);setErrPujada("");
-    try {
-      const res = await pujarFitxerLocal(form.fitxer);
-      const host=`${window.location.protocol}//${window.location.hostname}`;
-      await addDoc(collection(db,"documentManuals"),{
-        title:form.title,categoria:form.categoria,
-        url:`${host}/documents/${res.filename}`,filename:res.filename,
-        data:new Date().toISOString().split("T")[0],
-      });
-      setPujarModal(false);setForm({title:"",categoria:"Instal·lació",fitxer:null});
-    } catch(e) { setErrPujada("Error: "+e.message); }
-    setPujant(false);
-  };
-
-  const lista = manuals
-    .filter(m=>filtreCat==="Totes"||m.categoria===filtreCat)
-    .filter(m=>!buscar||m.title.toLowerCase().includes(buscar.toLowerCase()));
-
-  return (
-    <div>
-      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        <input className="input" placeholder="🔍 Cercar manual..." value={buscar} onChange={e=>setBuscar(e.target.value)} style={{maxWidth:260,fontSize:13}} />
-        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          {["Totes",...DOCS_CATS].map(c=>(
-            <button key={c} className="btn" onClick={()=>setFiltreCat(c)}
-              style={{fontSize:11,padding:"5px 11px",background:filtreCat===c?COLORS.accent:COLORS.surface,color:filtreCat===c?"#fff":COLORS.muted,border:`1px solid ${filtreCat===c?COLORS.accent:COLORS.border}`}}>
-              {c}
-            </button>
-          ))}
-        </div>
-        {!solaLectura&&<button className="btn btn-primary" style={{marginLeft:"auto",fontSize:13}} onClick={()=>{setErrPujada("");setPujarModal(true);}}>+ Pujar manual</button>}
-      </div>
-      {lista.length===0
-        ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense manuals{buscar||filtreCat!=="Totes"?" amb aquests filtres":""}</div>
-        : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
-            {lista.map(m=>(
-              <div key={m.id} className="card" style={{padding:18,borderTop:`3px solid ${CAT_COLORS_DOC[m.categoria]||COLORS.muted}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <span className="badge" style={{background:`${CAT_COLORS_DOC[m.categoria]||COLORS.muted}22`,color:CAT_COLORS_DOC[m.categoria]||COLORS.muted,fontSize:10}}>{m.categoria}</span>
-                  <span style={{fontSize:11,color:COLORS.muted}}>{m.data}</span>
-                </div>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:12,lineHeight:1.4}}>{m.title}</div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <a href={m.url} target="_blank" rel="noreferrer"
-                    style={{fontSize:12,color:COLORS.accent,textDecoration:"none",border:`1px solid ${COLORS.accent}33`,padding:"5px 12px",borderRadius:6}}>
-                    📥 Veure
-                  </a>
-                  {!solaLectura&&<button className="btn btn-danger" style={{padding:"5px 8px",fontSize:11}} onClick={()=>deleteDoc(doc(db,"documentManuals",m.id))}>🗑</button>}
-                </div>
-              </div>
-            ))}
-          </div>
-      }
-      {pujarModal&&(
-        <Modal title="Pujar manual" onClose={()=>setPujarModal(false)}>
-          <div style={{display:"grid",gap:14}}>
-            <div><label>Títol *</label><input className="input" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Nom del document..." /></div>
-            <div><label>Categoria</label>
-              <select className="select" style={{width:"100%"}} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
-                {DOCS_CATS.map(c=><option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>Fitxer (PDF, imatge...)</label>
-              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={e=>setForm({...form,fitxer:e.target.files[0]||null})} style={{fontSize:13,padding:"8px 0",width:"100%"}} />
-              {form.fitxer&&<div style={{fontSize:11,color:COLORS.muted,marginTop:4}}>📎 {form.fitxer.name} ({Math.round(form.fitxer.size/1024)}KB)</div>}
-            </div>
-            {errPujada&&<div style={{fontSize:12,color:COLORS.danger,background:"#FEE2E2",padding:"8px 12px",borderRadius:6}}>{errPujada}</div>}
-            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-              <button className="btn btn-ghost" onClick={()=>setPujarModal(false)}>Cancel·lar</button>
-              <button className="btn btn-primary" onClick={pujar} disabled={pujant||!form.title||!form.fitxer}>{pujant?"Pujant...":"Pujar"}</button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
 
 function DocFotos({ hojesTreball, solaLectura }) {
   const [filtreFull, setFiltreFull] = useState("");
@@ -2781,10 +2591,9 @@ function DocFulls({ hojesTreball, trabajadores }) {
   );
 }
 
-function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="manuals" }) {
+function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="fotos" }) {
   const [tab, setTab] = useState(initialTab);
   const TABS = [
-    {id:"manuals",  label:"Manuals",  icon:"📋"},
     {id:"fotos",    label:"Fotos",    icon:"📷"},
     {id:"albarans", label:"Albarans", icon:"🧾"},
     {id:"fulls",    label:"Fulls",    icon:"📄"},
@@ -2801,7 +2610,6 @@ function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, i
           }}>{t.icon} {t.label}</button>
         ))}
       </div>
-      {tab==="manuals"  && <DocManuals solaLectura={solaLectura} />}
       {tab==="fotos"    && <DocFotos hojesTreball={hojesTreball} solaLectura={solaLectura} />}
       {tab==="albarans" && <DocAlbarans albaranes={albaranes} />}
       {tab==="fulls"    && <DocFulls hojesTreball={hojesTreball} trabajadores={trabajadores} />}
@@ -2831,11 +2639,16 @@ function NotificacionsAdmin() {
     }
   };
 
+  const obrirPanel = () => {
+    setObert(o => !o);
+    if (!obert) marcarTotes();
+  };
+
   return (
     <div style={{ position:"relative", display:"inline-block" }}>
-      <button onClick={()=>setObert(o=>!o)} style={{ background:"transparent", border:"none", cursor:"pointer", position:"relative", padding:"6px 10px" }}>
+      <button onClick={obrirPanel} style={{ background:"transparent", border:"none", cursor:"pointer", position:"relative", padding:"6px 10px" }}>
         <span style={{ fontSize:22 }}>🔔</span>
-        {nollegides>0&&<span style={{ position:"absolute", top:0, right:0, background:COLORS.danger, color:"#fff", borderRadius:"50%", fontSize:10, fontWeight:700, width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{nollegides}</span>}
+        {nollegides>0&&<span style={{ position:"absolute", top:0, right:0, background:COLORS.warm, color:"#fff", borderRadius:"50%", fontSize:10, fontWeight:700, width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{nollegides}</span>}
       </button>
       {obert&&(
         <div style={{ position:"absolute", right:0, top:"110%", width:340, background:"#fff", border:`1px solid ${COLORS.border}`, borderRadius:14, zIndex:100, boxShadow:"0 8px 32px rgba(0,0,0,0.12)", overflow:"hidden" }}>
@@ -2866,7 +2679,7 @@ function NotificacionsAdmin() {
 
 
 // ─── VISTA SECRETARIA ─────────────────────────────────────────────────────────
-function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajadores, hojesTreball, onManualesChange }) {
+function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajadores, hojesTreball }) {
   const permes = usuarioInfo.seccionsPermeses || [];
   const navItems = NAV_ITEMS.filter(item => permes.includes(item.id));
   const [section, setSection] = useState(navItems[0]?.id || null);
@@ -2925,7 +2738,6 @@ function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajado
                   {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
                   {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
                   {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
-                  {section==="manuales"&&<Manuales onManualesChange={onManualesChange}/>}
                 </>
             }
           </div>
@@ -3080,7 +2892,6 @@ const NAV_ITEMS = [
   {id:"hojesTreball",label:"Fulls de Treball", icon:"📄"},
   {id:"albaranes",   label:"Albarans",         icon:"🧾"},
   {id:"documents",   label:"Documents",        icon:"📁"},
-  {id:"manuales",    label:"Manuals",          icon:"📚",adminUrl:"http://192.168.1.75:8080"},
 ];
 
 export default function App() {
@@ -3089,7 +2900,6 @@ export default function App() {
   const [cargandoAuth, setCargandoAuth] = useState(true);
   const [cuentaSinConfigurar, setCuentaSinConfigurar] = useState(false);
   const [section, setSection] = useState("dashboard");
-  const [manuales, setManuales] = useState([]);
   const [fichajes, setFichajes] = useState([]);
   const [encargos, setEncargos] = useState([]);
   const [albaranes, setAlbaranes] = useState([]);
@@ -3098,11 +2908,11 @@ export default function App() {
   const [cargandoT, setCargandoT] = useState(true);
 
   useEffect(()=>{ return onAuthStateChanged(auth,async(u)=>{ if(u){setUsuario(u);setCuentaSinConfigurar(false);const snap=await getDoc(doc(db,"usuarios",u.uid));if(snap.exists()){setUsuarioInfo(snap.data());}else{console.warn('[Auth] Usuari autenticat sense document a Firestore "usuarios". UID:',u.uid);setCuentaSinConfigurar(true);}}else{setUsuario(null);setUsuarioInfo(null);setCuentaSinConfigurar(false);}setCargandoAuth(false); }); },[]);
-  useEffect(()=>{ const q=query(collection(db,"fichajes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setFichajes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"fichajes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setFichajes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
   useEffect(()=>{ const q=query(collection(db,"trabajadores"),orderBy("nombre")); return onSnapshot(q,snap=>{setTrabajadores(snap.docs.map(d=>({id:d.id,...d.data()})));setCargandoT(false);}); },[]);
-  useEffect(()=>{ const q=query(collection(db,"encargos"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
-  useEffect(()=>{ const q=query(collection(db,"albaranes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setAlbaranes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
-  useEffect(()=>{ const q=query(collection(db,"hojesTreball"),orderBy("createdAt","desc")); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"encargos"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"albaranes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setAlbaranes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"hojesTreball"),orderBy("createdAt","desc")); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
 
   if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"'DM Sans',sans-serif"}}>Carregant...</div>;
   if(!usuario) return <Login />;
@@ -3116,7 +2926,7 @@ export default function App() {
   );
   if(usuarioInfo?.rol==="trabajador")  return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} trabajadores={trabajadores} />;
   if(usuarioInfo?.rol==="encarregat") return <VistaEncarregat usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
-  if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} onManualesChange={setManuales} />;
+  if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
 
   const pendentsCount = hojesTreball.filter(h=>h.estat==="Pendent"||!h.estat).length;
   const currentNavLabel = NAV_ITEMS.find(i=>i.id===section)?.label || "Inici";
@@ -3133,7 +2943,7 @@ export default function App() {
           </div>
           <nav style={{padding:"16px 12px",flex:1,display:"flex",flexDirection:"column",gap:2,overflowY:"auto"}}>
             {NAV_ITEMS.map(item=>(
-              <button key={item.id} onClick={()=>item.adminUrl ? window.open(item.adminUrl,"_blank") : setSection(item.id)}
+              <button key={item.id} onClick={()=>setSection(item.id)}
                 style={{width:"100%",background:section===item.id?COLORS.accentLight:"transparent",
                   borderRadius:8,border:"none",
                   color:section===item.id?COLORS.accent:COLORS.muted,
@@ -3142,7 +2952,6 @@ export default function App() {
                   display:"flex",alignItems:"center",gap:10,transition:"all .15s"}}>
                 <span style={{fontSize:14,width:18,textAlign:"center",opacity:0.7}}>{item.icon}</span>
                 {item.label}
-                {item.adminUrl && <span style={{marginLeft:"auto",fontSize:10,opacity:0.4}}>↗</span>}
                 {item.id==="hojesTreball" && pendentsCount>0 && (
                   <span style={{marginLeft:"auto",background:COLORS.yellow,color:"#fff",fontSize:10,fontWeight:600,borderRadius:10,padding:"1px 7px"}}>
                     {pendentsCount}
