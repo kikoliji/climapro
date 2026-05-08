@@ -1345,7 +1345,7 @@ function ResumHoresDetallat({ nom, mevesFulles }) {
 }
 
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
-function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid }) {
+function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajadores }) {
   const [fichando, setFichando] = useState(false);
   const [mensajeGPS, setMensajeGPS] = useState("");
   const [encargoSeleccionado, setEncargoSeleccionado] = useState(null);
@@ -3114,7 +3114,7 @@ export default function App() {
       <button className="btn btn-danger" onClick={()=>signOut(auth)}>Tancar sessió</button>
     </div>
   );
-  if(usuarioInfo?.rol==="trabajador")  return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} />;
+  if(usuarioInfo?.rol==="trabajador")  return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} trabajadores={trabajadores} />;
   if(usuarioInfo?.rol==="encarregat") return <VistaEncarregat usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
   if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} onManualesChange={setManuales} />;
 
