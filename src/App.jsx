@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { db, auth } from "./firebase";
 import {
-  collection, addDoc, onSnapshot, orderBy, query,
+  collection, addDoc, onSnapshot, orderBy, query, where,
   deleteDoc, doc, updateDoc, setDoc, getDoc, runTransaction, serverTimestamp
 } from "firebase/firestore";
 import {
@@ -11,6 +11,8 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+
+const hoy = new Date().toISOString().split("T")[0];
 
 const COLORS = {
   bg: "#F7F5F0", surface: "#FFFFFF", card: "#FFFFFF", border: "#E8E6E0",
@@ -1346,20 +1348,13 @@ function ResumHoresDetallat({ nom, mevesFulles }) {
 }
 
 // ─── VISTA TRABAJADOR ─────────────────────────────────────────────────────────
-function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajadores }) {
+function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajadores, hojesTreball }) {
   const [fichando, setFichando] = useState(false);
   const [mensajeGPS, setMensajeGPS] = useState("");
   const [encargoSeleccionado, setEncargoSeleccionado] = useState(null);
   const [mostrarFormFull, setMostrarFormFull] = useState(false);
   const [editantFull, setEditantFull] = useState(null);
-  const [mevesFulles, setMevesFulles] = useState([]);
   const [materialsHistorial, setMaterialsHistorial] = useState([]);
-  const hoy = new Date().toISOString().split("T")[0];
-
-  useEffect(() => {
-    const q = query(collection(db,"hojesTreball"), orderBy("createdAt","desc"));
-    return onSnapshot(q, snap => setMevesFulles(snap.docs.map(d=>({id:d.id,...d.data()})).filter(h=>(Array.isArray(h.operaris)?h.operaris:[]).includes(usuarioInfo.nombre))));
-  }, [usuarioInfo.nombre]);
 
   useEffect(() => {
     return onSnapshot(collection(db,"materialsHistorial"), snap => {
@@ -1426,7 +1421,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
         <ResumSetmanal nom={usuarioInfo.nombre} fichajes={fichajes} />
 
         {/* RESUM HORES DETALLAT */}
-        <ResumHoresDetallat nom={usuarioInfo.nombre} mevesFulles={mevesFulles} />
+        <ResumHoresDetallat nom={usuarioInfo.nombre} mevesFulles={hojesTreball} />
 
         {/* FICHAR */}
         <div className="card" style={{ padding:24, marginBottom:20, borderTop:`3px solid ${COLORS.accent}` }}>
@@ -1491,14 +1486,14 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
         {/* FULLS DE TREBALL DEL TREBALLADOR */}
         <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.green}` }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
-            <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:18, color:COLORS.green }}>📋 Els meus fulls de treball ({mevesFulles.length})</div>
+            <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:18, color:COLORS.green }}>📋 Els meus fulls de treball ({hojesTreball.length})</div>
             <button className="btn btn-primary" style={{ fontSize:13 }} onClick={()=>{ setEditantFull(null); setMostrarFormFull(true); }}>
               + Crear full de treball
             </button>
           </div>
-          {mevesFulles.length === 0
+          {hojesTreball.length === 0
             ? <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:16 }}>Encara no tens cap full de treball</div>
-            : mevesFulles.slice(0,10).map(h=>(
+            : hojesTreball.slice(0,10).map(h=>(
               <div key={h.id} style={{ padding:"12px 14px", marginBottom:8, borderRadius:10, background:COLORS.surface, border:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                 <div style={{ flex:1 }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
@@ -2810,7 +2805,6 @@ function VistaEncarregat({ usuarioInfo, fichajes, encargos, albaranes, trabajado
 }
 
 function Dashboard({ encargos, fichajes, trabajadores, albaranes, hojesTreball }) {
-  const hoy=new Date().toISOString().split("T")[0];
   const fichajesHoy=[...new Set(fichajes.filter(f=>f.fecha===hoy).map(f=>f.trabajador))].length;
   const encargosActivos=encargos.filter(e=>!e.archivado&&(e.estado==="En curs"||e.estado==="Pendent")).length;
   const materialFaltante=encargos.filter(e=>e.notasTrabajador&&e.estado!=="Completat"&&!e.archivado).length;
@@ -2909,10 +2903,13 @@ export default function App() {
 
   useEffect(()=>{ return onAuthStateChanged(auth,async(u)=>{ if(u){setUsuario(u);setCuentaSinConfigurar(false);const snap=await getDoc(doc(db,"usuarios",u.uid));if(snap.exists()){setUsuarioInfo(snap.data());}else{console.warn('[Auth] Usuari autenticat sense document a Firestore "usuarios". UID:',u.uid);setCuentaSinConfigurar(true);}}else{setUsuario(null);setUsuarioInfo(null);setCuentaSinConfigurar(false);}setCargandoAuth(false); }); },[]);
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"fichajes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setFichajes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol!=="trabajador") return; const q=query(collection(db,"fichajes"),where("trabajador","==",usuarioInfo.nombre),where("fecha","==",hoy)); return onSnapshot(q,snap=>setFichajes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
   useEffect(()=>{ const q=query(collection(db,"trabajadores"),orderBy("nombre")); return onSnapshot(q,snap=>{setTrabajadores(snap.docs.map(d=>({id:d.id,...d.data()})));setCargandoT(false);}); },[]);
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"encargos"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol!=="trabajador") return; const q=query(collection(db,"encargos"),where("asignados","array-contains",usuarioInfo.nombre)); return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"albaranes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setAlbaranes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"hojesTreball"),orderBy("createdAt","desc")); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
+  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol!=="trabajador") return; const q=query(collection(db,"hojesTreball"),where("operaris","array-contains",usuarioInfo.nombre)); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
 
   if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"'DM Sans',sans-serif"}}>Carregant...</div>;
   if(!usuario) return <Login />;
@@ -2924,7 +2921,7 @@ export default function App() {
       <button className="btn btn-danger" onClick={()=>signOut(auth)}>Tancar sessió</button>
     </div>
   );
-  if(usuarioInfo?.rol==="trabajador")  return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} trabajadores={trabajadores} />;
+  if(usuarioInfo?.rol==="trabajador")  return <VistaTrabajador usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} usuarioUid={usuario.uid} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
   if(usuarioInfo?.rol==="encarregat") return <VistaEncarregat usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
   if(usuarioInfo?.rol==="secretaria") return <VistaSecretaria usuarioInfo={usuarioInfo} fichajes={fichajes} encargos={encargos} albaranes={albaranes} trabajadores={trabajadores} hojesTreball={hojesTreball} />;
 
