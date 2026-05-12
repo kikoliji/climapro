@@ -50,6 +50,7 @@ const STYLE = `
   .btn-primary:hover { background:${COLORS.accentDim}; transform:translateY(-1px); box-shadow:0 4px 14px rgba(45,106,79,0.3); }
   .btn-ghost { background:transparent; color:${COLORS.muted}; border:1px solid ${COLORS.border}; }
   .btn-ghost:hover { border-color:${COLORS.accent}; color:${COLORS.accent}; }
+  .btn:disabled { opacity:0.35; cursor:not-allowed; pointer-events:none; }
   .btn-danger { background:transparent; color:${COLORS.warm}; border:1px solid rgba(200,96,26,0.25); font-size:12px; padding:5px 10px; }
   .btn-danger:hover { background:rgba(200,96,26,0.08); }
   .input { background:#fff; border:1px solid ${COLORS.border}; color:${COLORS.text}; border-radius:8px; padding:10px 13px; font-size:13px; font-family:'DM Sans',sans-serif; width:100%; outline:none; transition:border .2s,box-shadow .2s; }
