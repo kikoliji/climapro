@@ -1354,6 +1354,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
   const [encargoSeleccionado, setEncargoSeleccionado] = useState(null);
   const [mostrarFormFull, setMostrarFormFull] = useState(false);
   const [editantFull, setEditantFull] = useState(null);
+  const [paginaFulls, setPaginaFulls] = useState(0);
   const [materialsHistorial, setMaterialsHistorial] = useState([]);
 
   useEffect(() => {
@@ -1493,22 +1494,36 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
           </div>
           {hojesTreball.length === 0
             ? <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:16 }}>Encara no tens cap full de treball</div>
-            : hojesTreball.slice(0,10).map(h=>(
-              <div key={h.id} style={{ padding:"12px 14px", marginBottom:8, borderRadius:10, background:COLORS.surface, border:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-                    <EstadoBadge estado={h.estat||"Pendent"} />
-                    {h.numero&&<span style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, color:COLORS.accent, fontSize:14 }}>#{h.numero}</span>}
-                    {h.signatura&&<span className="badge" style={{ background:"rgba(0,230,118,.15)", color:COLORS.green }}>✅ Signat</span>}
-                  </div>
-                  <div style={{ fontSize:13, fontWeight:600 }}>{h.client||"Sense client"}</div>
-                  <div style={{ fontSize:11, color:COLORS.muted }}>{h.data}{h.poblacio?` · ${h.poblacio}`:""}</div>
-                </div>
-                <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>{ setEditantFull(h); setMostrarFormFull(true); }}>
-                  ✏ Editar
-                </button>
-              </div>
-            ))
+            : (() => {
+                const totalPagines = Math.ceil(hojesTreball.length / 10);
+                const pagina = Math.min(paginaFulls, totalPagines - 1);
+                const fullsPagina = hojesTreball.slice(pagina * 10, pagina * 10 + 10);
+                return (<>
+                  {fullsPagina.map(h=>(
+                    <div key={h.id} style={{ padding:"12px 14px", marginBottom:8, borderRadius:10, background:COLORS.surface, border:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
+                          <EstadoBadge estado={h.estat||"Pendent"} />
+                          {h.numero&&<span style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, color:COLORS.accent, fontSize:14 }}>#{h.numero}</span>}
+                          {h.signatura&&<span className="badge" style={{ background:"rgba(0,230,118,.15)", color:COLORS.green }}>✅ Signat</span>}
+                        </div>
+                        <div style={{ fontSize:13, fontWeight:600 }}>{h.client||"Sense client"}</div>
+                        <div style={{ fontSize:11, color:COLORS.muted }}>{h.data}{h.poblacio?` · ${h.poblacio}`:""}</div>
+                      </div>
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>{ setEditantFull(h); setMostrarFormFull(true); }}>
+                        ✏ Editar
+                      </button>
+                    </div>
+                  ))}
+                  {totalPagines > 1 && (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, gap:8 }}>
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>setPaginaFulls(p=>Math.max(0,p-1))} disabled={pagina===0}>← Anterior</button>
+                      <span style={{ fontSize:12, color:COLORS.muted }}>Pàgina {pagina+1} de {totalPagines}</span>
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>setPaginaFulls(p=>Math.min(totalPagines-1,p+1))} disabled={pagina===totalPagines-1}>Següent →</button>
+                    </div>
+                  )}
+                </>);
+              })()
           }
         </div>
 
@@ -2909,7 +2924,15 @@ export default function App() {
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol!=="trabajador") return; const q=query(collection(db,"encargos"),where("asignados","array-contains",usuarioInfo.nombre)); return onSnapshot(q,snap=>setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"albaranes"),orderBy("fecha","desc")); return onSnapshot(q,snap=>setAlbaranes(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
   useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol==="trabajador") return; const q=query(collection(db,"hojesTreball"),orderBy("createdAt","desc")); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
-  useEffect(()=>{ if(!usuarioInfo||usuarioInfo.rol!=="trabajador") return; const q=query(collection(db,"hojesTreball"),where("operaris","array-contains",usuarioInfo.nombre)); return onSnapshot(q,snap=>setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})))); },[usuarioInfo]);
+  useEffect(()=>{
+    if(!usuarioInfo||usuarioInfo.rol!=="trabajador") return;
+    console.log("[hojesTreball] usuarioInfo.nombre:", JSON.stringify(usuarioInfo.nombre));
+    const q=query(collection(db,"hojesTreball"),where("operaris","array-contains",usuarioInfo.nombre),orderBy("createdAt","desc"));
+    return onSnapshot(q,snap=>{
+      console.log("[hojesTreball] documents trobats:", snap.docs.length, snap.docs.map(d=>d.data().numero));
+      setHojesTreball(snap.docs.map(d=>({id:d.id,...d.data()})));
+    });
+  },[usuarioInfo]);
 
   if(cargandoAuth) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:COLORS.bg,color:COLORS.muted,fontFamily:"'DM Sans',sans-serif"}}>Carregant...</div>;
   if(!usuario) return <Login />;
