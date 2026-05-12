@@ -465,6 +465,7 @@ function Modal({ title, onClose, children, wide, extraWide }) {
 
 function EstadoBadge({ estado }) {
   const colors = {
+    esborrany:{bg:"#FEF9C3",color:"#A16207"}, pendent:{bg:"#FFEDD5",color:"#C8601A"}, completada:{bg:"#DCFCE7",color:"#16A34A"},
     Cobrat:{bg:"#DCFCE7",color:"#16A34A"}, Enviat:{bg:"#DBEAFE",color:"#2952A3"},
     Esborrany:{bg:"#F1F0EC",color:"#888880"}, Pendent:{bg:"#FEF9C3",color:"#A16207"},
     "En curs":{bg:"#DBEAFE",color:"#2952A3"}, Completat:{bg:"#DCFCE7",color:"#16A34A"},
@@ -565,7 +566,7 @@ function FormHojaTreball({ hoja, onClose, trabajadores, encargos, materialsHisto
     client: "", domicili: "", poblacio: "", telefon: "", nif: "",
     operaris: isWorker ? [isWorker] : [], horesOperari: "", horesAjudant: "", desplacaments: "", dietes: "", altres: "",
     descripcio: "", materials: [],
-    signatura: null, estat: "Pendent", encargoId: "", email: "",
+    signatura: null, estat: isWorker ? "esborrany" : "pendent", encargoId: "", email: "",
   };
 
   const [form, setForm] = useState(hoja ? { ...emptyForm, ...hoja, materials: Array.isArray(hoja.materials) ? hoja.materials : [], operaris: Array.isArray(hoja.operaris) ? hoja.operaris : (hoja.operaris ? [hoja.operaris] : []) } : emptyForm);
@@ -984,10 +985,10 @@ function HojesTreball({ trabajadores, encargos, podeAprovar=false }) {
                       onClick={()=>descarregarPDF(h)} disabled={generant===h.id}>
                       {generant===h.id ? "..." : "📄 PDF"}
                     </button>
-                    {podeAprovar && h.estat==="Pendent" && (
+                    {(h.estat==="pendent"||h.estat==="Pendent") && (
                       <button className="btn btn-primary" style={{fontSize:12,padding:"6px 12px",background:COLORS.green}}
-                        onClick={()=>updateDoc(doc(db,"hojesTreball",h.id),{estat:"Completat"})}>
-                        ✅ Aprovar
+                        onClick={()=>updateDoc(doc(db,"hojesTreball",h.id),{estat:"completada"})}>
+                        ✅ Completar
                       </button>
                     )}
                     <button className="btn btn-danger" onClick={()=>setConfirmarEliminar(h)}>🗑</button>
@@ -1402,6 +1403,13 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
   misUltimos.forEach(f=>{if(!porFecha[f.fecha])porFecha[f.fecha]=[];porFecha[f.fecha].push(f);});
   const colorEstado = {"Pendent":COLORS.yellow,"En curs":COLORS.accent,"Completat":COLORS.green};
 
+  const seteDiesEnrere = new Date(Date.now() - 7*24*60*60*1000).toISOString().split("T")[0];
+  const hojesVisibles = hojesTreball.filter(h => {
+    const estat = h.estat || "pendent";
+    if (estat === "completada" && (h.data || "") < seteDiesEnrere) return false;
+    return true;
+  });
+
   return (
     <>
     <style>{STYLE}</style>
@@ -1492,27 +1500,35 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
               + Crear full de treball
             </button>
           </div>
-          {hojesTreball.length === 0
+          {hojesVisibles.length === 0
             ? <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:16 }}>Encara no tens cap full de treball</div>
             : (() => {
-                const totalPagines = Math.ceil(hojesTreball.length / 10);
+                const totalPagines = Math.ceil(hojesVisibles.length / 10);
                 const pagina = Math.min(paginaFulls, totalPagines - 1);
-                const fullsPagina = hojesTreball.slice(pagina * 10, pagina * 10 + 10);
+                const fullsPagina = hojesVisibles.slice(pagina * 10, pagina * 10 + 10);
                 return (<>
                   {fullsPagina.map(h=>(
                     <div key={h.id} style={{ padding:"12px 14px", marginBottom:8, borderRadius:10, background:COLORS.surface, border:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                       <div style={{ flex:1 }}>
                         <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-                          <EstadoBadge estado={h.estat||"Pendent"} />
+                          <EstadoBadge estado={h.estat||"pendent"} />
                           {h.numero&&<span style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, color:COLORS.accent, fontSize:14 }}>#{h.numero}</span>}
                           {h.signatura&&<span className="badge" style={{ background:"rgba(0,230,118,.15)", color:COLORS.green }}>✅ Signat</span>}
                         </div>
                         <div style={{ fontSize:13, fontWeight:600 }}>{h.client||"Sense client"}</div>
                         <div style={{ fontSize:11, color:COLORS.muted }}>{h.data}{h.poblacio?` · ${h.poblacio}`:""}</div>
                       </div>
-                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>{ setEditantFull(h); setMostrarFormFull(true); }}>
-                        ✏ Editar
-                      </button>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-end" }}>
+                        {(h.estat==="esborrany") && (
+                          <button className="btn btn-primary" style={{ fontSize:12, padding:"6px 14px" }}
+                            onClick={()=>updateDoc(doc(db,"hojesTreball",h.id),{estat:"pendent"})}>
+                            📤 Enviar a l'administrador
+                          </button>
+                        )}
+                        <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }} onClick={()=>{ setEditantFull(h); setMostrarFormFull(true); }}>
+                          ✏ Editar
+                        </button>
+                      </div>
                     </div>
                   ))}
                   {totalPagines > 1 && (
