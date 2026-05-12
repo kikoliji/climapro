@@ -1405,11 +1405,13 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
   const colorEstado = {"Pendent":COLORS.yellow,"En curs":COLORS.accent,"Completat":COLORS.green};
 
   const seteDiesEnrere = new Date(Date.now() - 7*24*60*60*1000).toISOString().split("T")[0];
-  const hojesVisibles = hojesTreball.filter(h => {
-    const estat = h.estat || "pendent";
-    if (estat === "completada" && (h.data || "") < seteDiesEnrere) return false;
-    return true;
-  });
+  const hojesVisibles = hojesTreball
+    .filter(h => {
+      const estat = h.estat || "pendent";
+      if (estat === "completada" && (h.data || "") < seteDiesEnrere) return false;
+      return true;
+    })
+    .sort((a, b) => (b.data || "").localeCompare(a.data || ""));
 
   return (
     <>
