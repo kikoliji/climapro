@@ -2631,12 +2631,77 @@ function DocFulls({ hojesTreball, trabajadores }) {
   );
 }
 
+const FOTOS_INDEX_URL = "https://nouaire.ruizbravo.org/fotos/index";
+
+function DocFotosLocal() {
+  const [clientes, setClientes] = useState([]);
+  const [carregant, setCarregant] = useState(true);
+  const [error, setError] = useState(null);
+  const [clienteSel, setClienteSel] = useState("");
+  const [fechaSel, setFechaSel] = useState("");
+  const [lightbox, setLightbox] = useState(null);
+  const [lightboxFotos, setLightboxFotos] = useState([]);
+
+  useEffect(() => {
+    fetch(FOTOS_INDEX_URL)
+      .then(r => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json(); })
+      .then(data => { setClientes(data.clientes || []); setCarregant(false); })
+      .catch(e => { setError(e.message); setCarregant(false); });
+  }, []);
+
+  const clienteObj = clientes.find(c => c.nombre === clienteSel);
+  const fechaObj   = clienteObj?.fechas.find(f => f.fecha === fechaSel);
+  const fotos = fechaObj
+    ? fechaObj.fotos
+    : clienteObj
+      ? clienteObj.fechas.flatMap(f => f.fotos)
+      : clientes.flatMap(c => c.fechas.flatMap(f => f.fotos));
+
+  const obrir = (i) => { setLightboxFotos(fotos); setLightbox(i); };
+
+  if (carregant) return <div style={{textAlign:"center",padding:40,color:COLORS.muted}}>Carregant fotos...</div>;
+  if (error)     return <div style={{textAlign:"center",padding:40,color:COLORS.warm}}>Error: {error}</div>;
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <select className="select" value={clienteSel} onChange={e=>{setClienteSel(e.target.value);setFechaSel("");}} style={{minWidth:200,fontSize:13}}>
+          <option value="">Tots els clients ({clientes.length})</option>
+          {clientes.map(c=><option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
+        </select>
+        {clienteObj && (
+          <select className="select" value={fechaSel} onChange={e=>setFechaSel(e.target.value)} style={{minWidth:150,fontSize:13}}>
+            <option value="">Totes les dates ({clienteObj.fechas.length})</option>
+            {clienteObj.fechas.map(f=><option key={f.fecha} value={f.fecha}>{f.fecha}</option>)}
+          </select>
+        )}
+        <span style={{marginLeft:"auto",fontSize:13,color:COLORS.muted}}>{fotos.length} foto{fotos.length!==1?"s":""}</span>
+      </div>
+      {fotos.length === 0
+        ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense fotos</div>
+        : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
+            {fotos.map((url,i)=>(
+              <div key={i} className="card" style={{padding:6,cursor:"pointer"}} onClick={()=>obrir(i)}>
+                <img src={url} alt="" style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8}} />
+                <div style={{fontSize:10,color:COLORS.muted,marginTop:5,padding:"0 3px",lineHeight:1.4,wordBreak:"break-all"}}>
+                  {url.split("/").slice(-3,-1).join(" · ")}
+                </div>
+              </div>
+            ))}
+          </div>
+      }
+      {lightbox!==null&&<Lightbox fotos={lightboxFotos} indice={lightbox} onClose={()=>setLightbox(null)} />}
+    </div>
+  );
+}
+
 function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="fotos" }) {
   const [tab, setTab] = useState(initialTab);
   const TABS = [
-    {id:"fotos",    label:"Fotos",    icon:"📷"},
-    {id:"albarans", label:"Albarans", icon:"🧾"},
-    {id:"fulls",    label:"Fulls",    icon:"📄"},
+    {id:"fotos",       label:"Fotos",        icon:"📷"},
+    {id:"fotos-local", label:"Fotos Servidor",icon:"🗄️"},
+    {id:"albarans",    label:"Albarans",     icon:"🧾"},
+    {id:"fulls",       label:"Fulls",        icon:"📄"},
   ];
   return (
     <div>
@@ -2650,9 +2715,10 @@ function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, i
           }}>{t.icon} {t.label}</button>
         ))}
       </div>
-      {tab==="fotos"    && <DocFotos hojesTreball={hojesTreball} solaLectura={solaLectura} />}
-      {tab==="albarans" && <DocAlbarans albaranes={albaranes} />}
-      {tab==="fulls"    && <DocFulls hojesTreball={hojesTreball} trabajadores={trabajadores} />}
+      {tab==="fotos"       && <DocFotos hojesTreball={hojesTreball} solaLectura={solaLectura} />}
+      {tab==="fotos-local" && <DocFotosLocal />}
+      {tab==="albarans"    && <DocAlbarans albaranes={albaranes} />}
+      {tab==="fulls"       && <DocFulls hojesTreball={hojesTreball} trabajadores={trabajadores} />}
     </div>
   );
 }
