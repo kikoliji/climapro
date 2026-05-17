@@ -168,6 +168,17 @@ async function subirFoto(archivo) {
   return data.secure_url;
 }
 
+async function subirFotoLocal(archivo, client, fecha) {
+  const formData = new FormData();
+  formData.append("file", archivo);
+  formData.append("client", client);
+  formData.append("fecha", fecha);
+  const res = await fetch("https://nouaire.ruizbravo.org/upload/fotos", { method: "POST", body: formData });
+  if (!res.ok) throw new Error(`Upload error ${res.status}`);
+  const data = await res.json();
+  return data.url;
+}
+
 async function pujarFitxerLocal(archivo) {
   const formData = new FormData();
   formData.append("file", archivo);
@@ -1045,7 +1056,7 @@ function GestionarEncargo({ encargo, onClose }) {
     const urls = [...fotos];
     for (let i = 0; i < archivos.length; i++) {
       setProgreso(`Pujant foto ${i+1} de ${archivos.length}...`);
-      const url = await subirFoto(archivos[i]);
+      const url = await subirFotoLocal(archivos[i], encargo.cliente || "sense_client", hoy);
       urls.push(url);
     }
     setFotos(urls); setSubiendo(false); setProgreso("");
