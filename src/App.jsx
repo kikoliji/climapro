@@ -2244,6 +2244,66 @@ function Fichajes({ trabajadores, fichajes }) {
   );
 }
 
+// ─── CALENDARI SELECCIÓ MÚLTIPLE ─────────────────────────────────────────────
+function CalendariMultiple({ seleccionades, onChange }) {
+  const [mesBase, setMesBase] = useState(() => {
+    const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const any = mesBase.getFullYear();
+  const mes = mesBase.getMonth();
+  const nomMes = mesBase.toLocaleDateString("ca-ES", {month:"long", year:"numeric"});
+  const offset = (new Date(any, mes, 1).getDay() + 6) % 7;
+  const diesMes = new Date(any, mes + 1, 0).getDate();
+  const toStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const avui = toStr(new Date());
+  const toggle = str => onChange(seleccionades.includes(str) ? seleccionades.filter(s=>s!==str) : [...seleccionades,str]);
+  const dies = [];
+  for (let i = 0; i < offset; i++) dies.push(null);
+  for (let d = 1; d <= diesMes; d++) dies.push(new Date(any, mes, d));
+
+  return (
+    <div style={{background:COLORS.surface,borderRadius:12,border:`1px solid ${COLORS.border}`,padding:"12px 14px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <button type="button" onClick={()=>setMesBase(new Date(any,mes-1,1))}
+          style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:COLORS.muted,padding:"0 6px"}}>‹</button>
+        <span style={{fontSize:13,fontWeight:600,color:COLORS.text,textTransform:"capitalize"}}>{nomMes}</span>
+        <button type="button" onClick={()=>setMesBase(new Date(any,mes+1,1))}
+          style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:COLORS.muted,padding:"0 6px"}}>›</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4}}>
+        {["Dl","Dt","Dc","Dj","Dv","Ds","Dg"].map(d=>(
+          <div key={d} style={{textAlign:"center",fontSize:10,color:COLORS.muted,fontWeight:600,padding:"2px 0"}}>{d}</div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+        {dies.map((d,i) => {
+          if (!d) return <div key={`e${i}`} />;
+          const str = toStr(d);
+          const sel = seleccionades.includes(str);
+          const esAvui = str === avui;
+          return (
+            <button key={str} type="button" onClick={()=>toggle(str)} style={{
+              padding:"7px 0",borderRadius:8,border:"none",cursor:"pointer",
+              background:sel?COLORS.accent:esAvui?COLORS.accentLight:"transparent",
+              color:sel?"#000":esAvui?COLORS.accent:COLORS.text,
+              fontSize:13,fontWeight:sel||esAvui?700:400,
+              outline:sel?`2px solid ${COLORS.accent}`:"none",transition:"all .1s"
+            }}>
+              {d.getDate()}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{marginTop:10,fontSize:12,color:seleccionades.length>0?COLORS.accent:COLORS.muted,fontWeight:seleccionades.length>0?600:400}}>
+        {seleccionades.length === 0
+          ? "Clica per seleccionar dies"
+          : `${seleccionades.length} dia${seleccionades.length!==1?"es":""} seleccionat${seleccionades.length!==1?"s":""}: ${seleccionades.slice().sort().map(s=>s.slice(5)).join(", ")}`
+        }
+      </div>
+    </div>
+  );
+}
+
 // ─── ENCÀRRECS ───────────────────────────────────────────────────────────────
 function Encargos({ trabajadores, podeEliminar=true }) {
   const [encargos, setEncargos] = useState([]);
@@ -2266,6 +2326,7 @@ function Encargos({ trabajadores, podeEliminar=true }) {
   const nombresActivos = trabajadores.filter(t=>t.estado!=="Inactiu").map(t=>t.nombre);
   const emptyForm = { titulo:"", cliente:"", asignados:[], prioridad:"Mitjana", estado:"Pendent", fecha:"", notas:"", localidad:"", direccion:"", telefono:"", archivado:false };
   const [form, setForm] = useState(emptyForm);
+  const [fechasMultiples, setFechasMultiples] = useState([]);
 
   useEffect(()=>{ const q=query(collection(db,"encargos"),orderBy("fecha","desc")); return onSnapshot(q,snap=>{setEncargos(snap.docs.map(d=>({id:d.id,...d.data()})));setCargando(false);}); },[]);
 
@@ -2281,9 +2342,9 @@ function Encargos({ trabajadores, podeEliminar=true }) {
     .filter(e=>!filtroLocalidad||(e.localidad||"").toLowerCase().includes(filtroLocalidad.toLowerCase()))
     .filter(e=>!filtroBusqueda||e.titulo?.toLowerCase().includes(filtroBusqueda.toLowerCase())||e.cliente?.toLowerCase().includes(filtroBusqueda.toLowerCase()));
 
-  const abrirNuevo=()=>{setEditando(null);setForm(emptyForm);setModal(true);};
-  const abrirEditar=(e)=>{ setEditando(e); const asignados=Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]); const toStr=(v)=>(v&&typeof v==="object"&&v.toDate)?v.toDate().toISOString().split("T")[0]:(typeof v==="string"?v:""); setForm({titulo:e.titulo||"",cliente:e.cliente||"",asignados,prioridad:e.prioridad||"Mitjana",estado:e.estado||"Pendent",fecha:toStr(e.fecha),notas:e.notas||"",localidad:e.localidad||"",direccion:e.direccion||"",telefono:e.telefono||"",archivado:e.archivado||false}); setModal(true); };
-  const guardar=async()=>{ if(!form.titulo)return;setGuardando(true); const datos={...form,asignado:form.asignados[0]||""}; if(editando)await updateDoc(doc(db,"encargos",editando.id),datos); else await addDoc(collection(db,"encargos"),datos); setGuardando(false);setModal(false); };
+  const abrirNuevo=()=>{setEditando(null);setForm(emptyForm);setFechasMultiples([]);setModal(true);};
+  const abrirEditar=(e)=>{ setEditando(e); const asignados=Array.isArray(e.asignados)?e.asignados:(e.asignado?[e.asignado]:[]); const toStr=(v)=>(v&&typeof v==="object"&&v.toDate)?v.toDate().toISOString().split("T")[0]:(typeof v==="string"?v:""); setForm({titulo:e.titulo||"",cliente:e.cliente||"",asignados,prioridad:e.prioridad||"Mitjana",estado:e.estado||"Pendent",fecha:toStr(e.fecha),notas:e.notas||"",localidad:e.localidad||"",direccion:e.direccion||"",telefono:e.telefono||"",archivado:e.archivado||false}); setFechasMultiples([]); setModal(true); };
+  const guardar=async()=>{ if(!form.titulo)return;setGuardando(true); const datos={...form,asignado:form.asignados[0]||""}; if(editando){await updateDoc(doc(db,"encargos",editando.id),datos);}else{const dates=fechasMultiples.length>0?fechasMultiples:[form.fecha||""];for(const fecha of dates)await addDoc(collection(db,"encargos"),{...datos,fecha});} setGuardando(false);setModal(false); };
   const eliminar=async(id)=>{await deleteDoc(doc(db,"encargos",id));setConfirmarEliminar(null);};
   const cambiarEstado=async(id,estado)=>{ const ahora=new Date().toISOString().split("T")[0]; await updateDoc(doc(db,"encargos",id),{estado,fechaCompletado:estado==="Completat"?ahora:null}); };
   const archivar=async(id,archivado)=>{await updateDoc(doc(db,"encargos",id),{archivado});};
@@ -2417,8 +2478,19 @@ function Encargos({ trabajadores, podeEliminar=true }) {
           <div><label>Títol *</label><input className="input" value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} /></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Client</label><input className="input" value={form.cliente} onChange={e=>setForm({...form,cliente:e.target.value})} /></div>
-            <div><label>Data prevista</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
+            {editando
+              ? <div><label>Data prevista</label><input className="input" type="date" value={form.fecha} onChange={e=>setForm({...form,fecha:e.target.value})} /></div>
+              : <div />
+            }
           </div>
+          {!editando&&(
+            <div>
+              <label>Dies de treball</label>
+              <div style={{marginTop:6}}>
+                <CalendariMultiple seleccionades={fechasMultiples} onChange={setFechasMultiples} />
+              </div>
+            </div>
+          )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div><label>Localitat</label><input className="input" value={form.localidad} onChange={e=>setForm({...form,localidad:e.target.value})} /></div>
             <div><label>Telèfon</label><input className="input" value={form.telefono} onChange={e=>setForm({...form,telefono:e.target.value})} /></div>
@@ -2448,7 +2520,9 @@ function Encargos({ trabajadores, podeEliminar=true }) {
           <div><label>Notes per al treballador</label><input className="input" value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} /></div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost" onClick={()=>setModal(false)}>Cancel·lar</button>
-            <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando?"Guardant...":editando?"Guardar canvis":"Crear encàrrec"}</button>
+            <button className="btn btn-primary" onClick={guardar} disabled={guardando}>
+              {guardando?"Guardant...":editando?"Guardar canvis":fechasMultiples.length>1?`Crear ${fechasMultiples.length} encàrrecs`:"Crear encàrrec"}
+            </button>
           </div>
         </div>
       </Modal>}
