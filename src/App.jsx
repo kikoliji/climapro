@@ -1000,7 +1000,8 @@ function HojesTreball({ trabajadores, encargos, podeAprovar=false }) {
 
   const lista = hojes
     .filter(h => filtreEstat==="Tots" || h.estat===filtreEstat)
-    .filter(h => !filtreBusqueda || h.client?.toLowerCase().includes(filtreBusqueda.toLowerCase()) || h.numero?.includes(filtreBusqueda));
+    .filter(h => !filtreBusqueda || h.client?.toLowerCase().includes(filtreBusqueda.toLowerCase()) || h.numero?.includes(filtreBusqueda))
+    .sort((a, b) => (b.numero || "").localeCompare(a.numero || ""));
 
   return (
     <div>
