@@ -1422,10 +1422,17 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
   const [editantFull, setEditantFull] = useState(null);
   const [paginaFulls, setPaginaFulls] = useState(0);
   const [materialsHistorial, setMaterialsHistorial] = useState([]);
+  const [usuarisPermesos, setUsuarisPermesos] = useState(null);
 
   useEffect(() => {
     return onSnapshot(collection(db,"materialsHistorial"), snap => {
       setMaterialsHistorial(snap.docs.map(d=>d.data().nom).filter(Boolean));
+    });
+  }, []);
+
+  useEffect(() => {
+    return onSnapshot(doc(db, "config", "fotosAcces"), snap => {
+      setUsuarisPermesos(snap.exists() ? (snap.data().usuarisPermesos || []) : []);
     });
   }, []);
 
@@ -1609,6 +1616,14 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
               })()
           }
         </div>
+
+        {/* FOTOS SERVIDOR */}
+        {usuarisPermesos !== null && usuarisPermesos.includes(usuarioInfo.nombre) && (
+          <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.warm}` }}>
+            <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:18, marginBottom:20, color:COLORS.warm }}>🗄️ Fotos del servidor</div>
+            <DocFotosLocal usuarioInfo={usuarioInfo} trabajadores={trabajadores} />
+          </div>
+        )}
 
         {/* HISTORIAL */}
         <div className="card" style={{ padding:20 }}>
