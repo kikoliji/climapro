@@ -112,4 +112,4 @@ def health():
 if __name__ == "__main__":
     print(f"[upload_server] Escoltant al port 3001")
     print(f"[upload_server] Desa arxius a: {UPLOAD_DIR}")
-    app.run(host="0.0.0.0", port=3001)
+    app.run(host="127.0.0.1", port=3001)
