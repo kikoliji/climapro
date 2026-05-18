@@ -1621,7 +1621,7 @@ function VistaTrabajador({ usuarioInfo, fichajes, encargos, usuarioUid, trabajad
         {usuarisPermesos !== null && usuarisPermesos.includes(usuarioInfo.nombre) && (
           <div className="card" style={{ padding:20, marginBottom:20, borderTop:`3px solid ${COLORS.warm}` }}>
             <div style={{ fontFamily:"'DM Serif Display',serif", fontWeight:700, fontSize:18, marginBottom:20, color:COLORS.warm }}>🗄️ Fotos del servidor</div>
-            <DocFotosLocal usuarioInfo={usuarioInfo} trabajadores={trabajadores} />
+            <DocFotosLocal usuarioInfo={usuarioInfo} trabajadores={trabajadores} simplificat />
           </div>
         )}
 
@@ -2713,7 +2713,7 @@ function DocFulls({ hojesTreball, trabajadores }) {
 
 const FOTOS_INDEX_URL = "https://nouaire.ruizbravo.org/fotos/index";
 
-function DocFotosLocal({ usuarioInfo, trabajadores }) {
+function DocFotosLocal({ usuarioInfo, trabajadores, simplificat=false }) {
   const [clientes,     setClientes]     = useState([]);
   const [carregant,    setCarregant]    = useState(true);
   const [error,        setError]        = useState(null);
@@ -2875,6 +2875,8 @@ function DocFotosLocal({ usuarioInfo, trabajadores }) {
   if (carregant) return <div style={{textAlign:"center",padding:48,color:COLORS.muted,fontSize:14}}>Carregant fotos del servidor...</div>;
   if (error)     return <div style={{textAlign:"center",padding:48,color:COLORS.warm,fontSize:14}}>⚠ {error}</div>;
 
+  const mostrarCarpetes = !simplificat || cerca.length >= 2;
+
   return (
     <div>
       {tabBar}
@@ -2886,10 +2888,12 @@ function DocFotosLocal({ usuarioInfo, trabajadores }) {
           value={cerca}
           onChange={e=>{setCerca(e.target.value);setClienteObert(null);}}
           placeholder="Cerca client..."
-          style={{paddingLeft:36,fontSize:14,width:"100%",maxWidth:340}}
+          style={{paddingLeft:36,fontSize:14,width:"100%",maxWidth:simplificat?400:340}}
         />
       </div>
-      {clientesFiltrats.length === 0
+      {!mostrarCarpetes
+        ? <div style={{textAlign:"center",padding:32,color:COLORS.muted,fontSize:13}}>Escriu el nom del client per cercar</div>
+        : clientesFiltrats.length === 0
         ? <div style={{textAlign:"center",padding:48,color:COLORS.muted}}>Cap client trobat</div>
         : <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {clientesFiltrats.map(c => {
