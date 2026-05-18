@@ -2634,63 +2634,138 @@ function DocFulls({ hojesTreball, trabajadores }) {
 const FOTOS_INDEX_URL = "https://nouaire.ruizbravo.org/fotos/index";
 
 function DocFotosLocal() {
-  const [clientes, setClientes] = useState([]);
-  const [carregant, setCarregant] = useState(true);
-  const [error, setError] = useState(null);
-  const [clienteSel, setClienteSel] = useState("");
-  const [fechaSel, setFechaSel] = useState("");
-  const [lightbox, setLightbox] = useState(null);
-  const [lightboxFotos, setLightboxFotos] = useState([]);
+  const [clientes,   setClientes]   = useState([]);
+  const [carregant,  setCarregant]  = useState(true);
+  const [error,      setError]      = useState(null);
+  const [cerca,      setCerca]      = useState("");
+  const [clienteObert, setClienteObert] = useState(null); // nombre
+  const [fechaOberta,  setFechaOberta]  = useState(null); // {client, fecha, fotos}
+  const [lightbox,   setLightbox]   = useState(null);
 
   useEffect(() => {
     fetch(FOTOS_INDEX_URL)
       .then(r => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json(); })
-      .then(data => { setClientes(data.clientes || []); setCarregant(false); })
+      .then(d => { setClientes(d.clientes || []); setCarregant(false); })
       .catch(e => { setError(e.message); setCarregant(false); });
   }, []);
 
-  const clienteObj = clientes.find(c => c.nombre === clienteSel);
-  const fechaObj   = clienteObj?.fechas.find(f => f.fecha === fechaSel);
-  const fotos = fechaObj
-    ? fechaObj.fotos
-    : clienteObj
-      ? clienteObj.fechas.flatMap(f => f.fotos)
-      : clientes.flatMap(c => c.fechas.flatMap(f => f.fotos));
+  const clientesFiltrats = clientes.filter(c =>
+    c.nombre.toLowerCase().includes(cerca.toLowerCase())
+  );
 
-  const obrir = (i) => { setLightboxFotos(fotos); setLightbox(i); };
+  const totalFotos = c => c.fechas.reduce((s, f) => s + f.fotos.length, 0);
 
-  if (carregant) return <div style={{textAlign:"center",padding:40,color:COLORS.muted}}>Carregant fotos...</div>;
-  if (error)     return <div style={{textAlign:"center",padding:40,color:COLORS.warm}}>Error: {error}</div>;
+  const obrirFecha = (client, fecha, fotos) => {
+    setFechaOberta({ client, fecha, fotos });
+    setLightbox(null);
+  };
+
+  // ── Vista grid de fotos d'una data ────────────────────────────────────────
+  if (fechaOberta) return (
+    <div>
+      <button className="btn btn-ghost" style={{marginBottom:16,fontSize:13}}
+        onClick={()=>setFechaOberta(null)}>
+        ← {fechaOberta.client} / {fechaOberta.fecha}
+      </button>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}}>
+        {fechaOberta.fotos.map((url,i)=>(
+          <div key={i} onClick={()=>setLightbox(i)}
+            style={{cursor:"pointer",borderRadius:12,overflow:"hidden",
+              border:`1px solid ${COLORS.border}`,background:COLORS.surface,
+              transition:"transform .15s,box-shadow .15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.03)";e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.10)";}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
+            <img src={url} alt="" style={{width:"100%",aspectRatio:"1",objectFit:"cover",display:"block"}} />
+          </div>
+        ))}
+      </div>
+      <div style={{marginTop:12,fontSize:12,color:COLORS.muted}}>
+        {fechaOberta.fotos.length} foto{fechaOberta.fotos.length!==1?"s":""}
+      </div>
+      {lightbox!==null&&(
+        <Lightbox fotos={fechaOberta.fotos} indice={lightbox} onClose={()=>setLightbox(null)} />
+      )}
+    </div>
+  );
+
+  // ── Vista carpetes ─────────────────────────────────────────────────────────
+  if (carregant) return <div style={{textAlign:"center",padding:48,color:COLORS.muted,fontSize:14}}>Carregant fotos del servidor...</div>;
+  if (error)     return <div style={{textAlign:"center",padding:48,color:COLORS.warm,fontSize:14}}>⚠ {error}</div>;
 
   return (
     <div>
-      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        <select className="select" value={clienteSel} onChange={e=>{setClienteSel(e.target.value);setFechaSel("");}} style={{minWidth:200,fontSize:13}}>
-          <option value="">Tots els clients ({clientes.length})</option>
-          {clientes.map(c=><option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
-        </select>
-        {clienteObj && (
-          <select className="select" value={fechaSel} onChange={e=>setFechaSel(e.target.value)} style={{minWidth:150,fontSize:13}}>
-            <option value="">Totes les dates ({clienteObj.fechas.length})</option>
-            {clienteObj.fechas.map(f=><option key={f.fecha} value={f.fecha}>{f.fecha}</option>)}
-          </select>
-        )}
-        <span style={{marginLeft:"auto",fontSize:13,color:COLORS.muted}}>{fotos.length} foto{fotos.length!==1?"s":""}</span>
+      {/* Buscador */}
+      <div style={{position:"relative",marginBottom:20}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",
+          fontSize:15,color:COLORS.muted,pointerEvents:"none"}}>🔍</span>
+        <input
+          className="input"
+          value={cerca}
+          onChange={e=>{setCerca(e.target.value);setClienteObert(null);}}
+          placeholder="Cerca client..."
+          style={{paddingLeft:36,fontSize:14,width:"100%",maxWidth:340}}
+        />
       </div>
-      {fotos.length === 0
-        ? <div className="card" style={{padding:40,textAlign:"center",color:COLORS.muted}}>Sense fotos</div>
-        : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
-            {fotos.map((url,i)=>(
-              <div key={i} className="card" style={{padding:6,cursor:"pointer"}} onClick={()=>obrir(i)}>
-                <img src={url} alt="" style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:8}} />
-                <div style={{fontSize:10,color:COLORS.muted,marginTop:5,padding:"0 3px",lineHeight:1.4,wordBreak:"break-all"}}>
-                  {url.split("/").slice(-3,-1).join(" · ")}
+
+      {clientesFiltrats.length === 0
+        ? <div style={{textAlign:"center",padding:48,color:COLORS.muted}}>Cap client trobat</div>
+        : <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {clientesFiltrats.map(c => {
+              const obert  = clienteObert === c.nombre;
+              const nFotos = totalFotos(c);
+              return (
+                <div key={c.nombre} style={{borderRadius:12,border:`1px solid ${COLORS.border}`,
+                  background:COLORS.surface,overflow:"hidden"}}>
+
+                  {/* Capçalera carpeta */}
+                  <div onClick={()=>setClienteObert(obert ? null : c.nombre)}
+                    style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",
+                      cursor:"pointer",userSelect:"none",
+                      background: obert ? COLORS.accentLight : COLORS.surface,
+                      transition:"background .15s"}}
+                    onMouseEnter={e=>{ if(!obert) e.currentTarget.style.background=COLORS.bg; }}
+                    onMouseLeave={e=>{ if(!obert) e.currentTarget.style.background=COLORS.surface; }}>
+                    <span style={{fontSize:22}}>{obert ? "📂" : "📁"}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,fontSize:14,color:obert?COLORS.accent:COLORS.text}}>
+                        {c.nombre}
+                      </div>
+                      <div style={{fontSize:11,color:COLORS.muted,marginTop:2}}>
+                        {c.fechas.length} data{c.fechas.length!==1?"es":""} · {nFotos} foto{nFotos!==1?"s":""}
+                      </div>
+                    </div>
+                    <span style={{fontSize:12,color:COLORS.muted,transition:"transform .2s",
+                      transform: obert?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+                  </div>
+
+                  {/* Llista de dates */}
+                  {obert && (
+                    <div style={{borderTop:`1px solid ${COLORS.border}`,padding:"10px 14px",
+                      display:"flex",flexDirection:"column",gap:4}}>
+                      {c.fechas.map(f=>(
+                        <div key={f.fecha}
+                          onClick={()=>obrirFecha(c.nombre, f.fecha, f.fotos)}
+                          style={{display:"flex",alignItems:"center",gap:10,
+                            padding:"10px 12px",borderRadius:8,cursor:"pointer",
+                            transition:"background .12s"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=COLORS.bg}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <span style={{fontSize:16}}>🗓</span>
+                          <span style={{fontSize:13,flex:1,color:COLORS.text}}>{f.fecha}</span>
+                          <span style={{fontSize:11,color:COLORS.muted,
+                            background:COLORS.bg,borderRadius:20,padding:"2px 10px"}}>
+                            {f.fotos.length} foto{f.fotos.length!==1?"s":""}
+                          </span>
+                          <span style={{fontSize:11,color:COLORS.muted}}>→</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
       }
-      {lightbox!==null&&<Lightbox fotos={lightboxFotos} indice={lightbox} onClose={()=>setLightbox(null)} />}
     </div>
   );
 }
