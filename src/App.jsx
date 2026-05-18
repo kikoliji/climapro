@@ -158,6 +158,59 @@ function Lightbox({ fotos, indice, onClose }) {
   );
 }
 
+function LightboxProtegit({ fotos, indice, onClose }) {
+  const [actual, setActual] = useState(indice);
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") setActual(a => Math.min(a + 1, fotos.length - 1));
+      if (e.key === "ArrowLeft")  setActual(a => Math.max(a - 1, 0));
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [fotos, onClose]);
+
+  return (
+    <div
+      onContextMenu={e=>e.preventDefault()}
+      onClick={onClose}
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:200,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        flexDirection:"column",gap:16,userSelect:"none"}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{position:"relative",width:"min(90vw,900px)",height:"min(80vh,700px)"}}>
+        <div style={{
+          width:"100%",height:"100%",
+          backgroundImage:`url(${fotos[actual]})`,
+          backgroundSize:"contain",
+          backgroundRepeat:"no-repeat",
+          backgroundPosition:"center",
+          userSelect:"none",
+          WebkitUserDrag:"none",
+          pointerEvents:"none",
+        }} />
+        {fotos.length > 1 && (
+          <>
+            <button onClick={e=>{e.stopPropagation();setActual(a=>Math.max(a-1,0));}}
+              style={{position:"absolute",left:-48,top:"50%",transform:"translateY(-50%)",
+                background:"rgba(255,255,255,.15)",border:"none",color:"#fff",
+                fontSize:24,width:40,height:40,borderRadius:"50%",cursor:"pointer",
+                pointerEvents:"all"}}>‹</button>
+            <button onClick={e=>{e.stopPropagation();setActual(a=>Math.min(a+1,fotos.length-1));}}
+              style={{position:"absolute",right:-48,top:"50%",transform:"translateY(-50%)",
+                background:"rgba(255,255,255,.15)",border:"none",color:"#fff",
+                fontSize:24,width:40,height:40,borderRadius:"50%",cursor:"pointer",
+                pointerEvents:"all"}}>›</button>
+          </>
+        )}
+      </div>
+      <div style={{color:"rgba(255,255,255,.6)",fontSize:13,pointerEvents:"none"}}>
+        {actual+1} / {fotos.length} · ESC per tancar
+      </div>
+    </div>
+  );
+}
+
 async function subirFoto(archivo) {
   const formData = new FormData();
   formData.append("file", archivo);
@@ -1713,6 +1766,12 @@ function GestionUsuarios({ trabajadores }) {
                       </label>
                     );
                   })}
+                  {(()=>{const sel=(rolForm.seccionsPermeses||[]).includes("verFotos");return(
+                    <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 10px",borderRadius:8,background:sel?COLORS.accentGlow:COLORS.surface,border:`1px solid ${sel?COLORS.accent:COLORS.border}`,fontSize:12,fontWeight:500,textTransform:"none",letterSpacing:0,gridColumn:"1/-1"}}>
+                      <input type="checkbox" checked={sel} onChange={()=>{const prev=rolForm.seccionsPermeses||[];setRolForm({...rolForm,seccionsPermeses:sel?prev.filter(x=>x!=="verFotos"):[...prev,"verFotos"]});}} style={{accentColor:COLORS.accent}} />
+                      🗄️ Veure Fotos del Servidor
+                    </label>
+                  );})()}
                 </div>
               </div>
             )}
@@ -1768,6 +1827,12 @@ function GestionUsuarios({ trabajadores }) {
                     </label>
                   );
                 })}
+                {(()=>{const sel=(form.seccionsPermeses||[]).includes("verFotos");return(
+                  <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 10px",borderRadius:8,background:sel?COLORS.accentGlow:COLORS.surface,border:`1px solid ${sel?COLORS.accent:COLORS.border}`,fontSize:12,fontWeight:500,textTransform:"none",letterSpacing:0,gridColumn:"1/-1"}}>
+                    <input type="checkbox" checked={sel} onChange={()=>{const prev=form.seccionsPermeses||[];setForm({...form,seccionsPermeses:sel?prev.filter(x=>x!=="verFotos"):[...prev,"verFotos"]});}} style={{accentColor:COLORS.accent}} />
+                    🗄️ Veure Fotos del Servidor
+                  </label>
+                );})()}
               </div>
             </div>
           )}
@@ -2667,15 +2732,19 @@ function DocFotosLocal() {
         onClick={()=>setFechaOberta(null)}>
         ← {fechaOberta.client} / {fechaOberta.fecha}
       </button>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10,userSelect:"none"}}>
         {fechaOberta.fotos.map((url,i)=>(
           <div key={i} onClick={()=>setLightbox(i)}
+            onContextMenu={e=>e.preventDefault()}
             style={{cursor:"pointer",borderRadius:12,overflow:"hidden",
               border:`1px solid ${COLORS.border}`,background:COLORS.surface,
-              transition:"transform .15s,box-shadow .15s"}}
+              transition:"transform .15s,box-shadow .15s",userSelect:"none"}}
             onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.03)";e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.10)";}}
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
-            <img src={url} alt="" style={{width:"100%",aspectRatio:"1",objectFit:"cover",display:"block"}} />
+            <img src={url} alt="" draggable={false}
+              onContextMenu={e=>e.preventDefault()}
+              style={{width:"100%",aspectRatio:"1",objectFit:"cover",display:"block",
+                userSelect:"none",WebkitUserDrag:"none",pointerEvents:"none"}} />
           </div>
         ))}
       </div>
@@ -2683,7 +2752,7 @@ function DocFotosLocal() {
         {fechaOberta.fotos.length} foto{fechaOberta.fotos.length!==1?"s":""}
       </div>
       {lightbox!==null&&(
-        <Lightbox fotos={fechaOberta.fotos} indice={lightbox} onClose={()=>setLightbox(null)} />
+        <LightboxProtegit fotos={fechaOberta.fotos} indice={lightbox} onClose={()=>setLightbox(null)} />
       )}
     </div>
   );
@@ -2770,11 +2839,11 @@ function DocFotosLocal() {
   );
 }
 
-function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="fotos" }) {
+function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="fotos", verFotos=true }) {
   const [tab, setTab] = useState(initialTab);
   const TABS = [
     {id:"fotos",       label:"Fotos",        icon:"📷"},
-    {id:"fotos-local", label:"Fotos Servidor",icon:"🗄️"},
+    ...(verFotos ? [{id:"fotos-local", label:"Fotos Servidor", icon:"🗄️"}] : []),
     {id:"albarans",    label:"Albarans",     icon:"🧾"},
     {id:"fulls",       label:"Fulls",        icon:"📄"},
   ];
@@ -2982,7 +3051,7 @@ function VistaEncarregat({ usuarioInfo, fichajes, encargos, albaranes, trabajado
             {section==="fichajes"    && <Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
             {section==="encargos"    && <Encargos trabajadores={trabajadores} podeEliminar={false}/>}
             {section==="hojesTreball"&& <HojesTreball trabajadores={trabajadores} encargos={encargos} podeAprovar={true}/>}
-            {section==="documents"   && <Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes}/>}
+            {section==="documents"   && <Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes} verFotos={permes.includes("verFotos")}/>}
           </div>
         </div>
       </div>
