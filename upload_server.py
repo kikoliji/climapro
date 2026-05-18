@@ -101,10 +101,8 @@ def fotos_index():
                 for f in sorted(fecha_dir.iterdir())
                 if f.is_file() and f.suffix.lower() in IMAGE_EXTS
             ]
-            if fotos:
-                fechas.append({"fecha": fecha_dir.name, "fotos": fotos})
-        if fechas:
-            clientes.append({"nombre": client_dir.name, "fechas": fechas})
+            fechas.append({"fecha": fecha_dir.name, "fotos": fotos})
+        clientes.append({"nombre": client_dir.name, "fechas": fechas})
     return jsonify({"clientes": clientes})
 
 @app.route("/health")
