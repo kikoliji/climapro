@@ -2698,36 +2698,135 @@ function DocFulls({ hojesTreball, trabajadores }) {
 
 const FOTOS_INDEX_URL = "https://nouaire.ruizbravo.org/fotos/index";
 
-function DocFotosLocal() {
-  const [clientes,   setClientes]   = useState([]);
-  const [carregant,  setCarregant]  = useState(true);
-  const [error,      setError]      = useState(null);
-  const [cerca,      setCerca]      = useState("");
-  const [clienteObert, setClienteObert] = useState(null); // nombre
-  const [fechaOberta,  setFechaOberta]  = useState(null); // {client, fecha, fotos}
-  const [lightbox,   setLightbox]   = useState(null);
+function DocFotosLocal({ usuarioInfo, trabajadores }) {
+  const [clientes,     setClientes]     = useState([]);
+  const [carregant,    setCarregant]    = useState(true);
+  const [error,        setError]        = useState(null);
+  const [cerca,        setCerca]        = useState("");
+  const [clienteObert, setClienteObert] = useState(null);
+  const [fechaOberta,  setFechaOberta]  = useState(null);
+  const [lightbox,     setLightbox]     = useState(null);
+  const [permesos,     setPermesos]     = useState(null); // null = carregant
+  const [tabLocal,     setTabLocal]     = useState("fotos");
+  const [guardant,     setGuardant]     = useState(false);
+  const hasFetched = useRef(false);
+
+  const esAdmin = usuarioInfo?.rol === "admin";
+  const nomUsu  = usuarioInfo?.nombre || "";
 
   useEffect(() => {
+    return onSnapshot(doc(db, "config", "fotosAcces"), snap => {
+      setPermesos(snap.exists() ? (snap.data().usuarisPermesos || []) : []);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (permesos === null) return;
+    if (!esAdmin && !permesos.includes(nomUsu)) return;
+    if (hasFetched.current) return;
+    hasFetched.current = true;
     fetch(FOTOS_INDEX_URL)
       .then(r => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json(); })
       .then(d => { setClientes(d.clientes || []); setCarregant(false); })
       .catch(e => { setError(e.message); setCarregant(false); });
-  }, []);
+  }, [permesos]);
+
+  const toggleUsuari = async (nombre) => {
+    setGuardant(true);
+    const novaLlista = permesos.includes(nombre)
+      ? permesos.filter(n => n !== nombre)
+      : [...permesos, nombre];
+    await setDoc(doc(db, "config", "fotosAcces"), { usuarisPermesos: novaLlista });
+    setGuardant(false);
+  };
 
   const clientesFiltrats = clientes.filter(c =>
     c.nombre.toLowerCase().includes(cerca.toLowerCase())
   );
-
   const totalFotos = c => c.fechas.reduce((s, f) => s + f.fotos.length, 0);
+  const obrirFecha = (client, fecha, fotos) => { setFechaOberta({ client, fecha, fotos }); setLightbox(null); };
 
-  const obrirFecha = (client, fecha, fotos) => {
-    setFechaOberta({ client, fecha, fotos });
-    setLightbox(null);
-  };
+  const TABS_LOCAL = [
+    { id:"fotos",  label:"Fotos",  icon:"🗄️" },
+    ...(esAdmin ? [{ id:"acces", label:"Accés", icon:"🔑" }] : []),
+  ];
 
-  // ── Vista grid de fotos d'una data ────────────────────────────────────────
+  const tabBar = esAdmin ? (
+    <div style={{display:"flex",gap:4,marginBottom:20,background:"#fff",borderRadius:12,padding:6,border:`1px solid ${COLORS.border}`,width:"fit-content"}}>
+      {TABS_LOCAL.map(t=>(
+        <button key={t.id} onClick={()=>{setTabLocal(t.id);setFechaOberta(null);}} style={{
+          padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,
+          fontFamily:"'DM Sans',sans-serif",fontWeight:500,transition:"all .15s",
+          background:tabLocal===t.id?COLORS.accent:"transparent",
+          color:tabLocal===t.id?"#fff":COLORS.muted
+        }}>{t.icon} {t.label}</button>
+      ))}
+    </div>
+  ) : null;
+
+  // Loading permissions
+  if (permesos === null) return (
+    <div style={{textAlign:"center",padding:48,color:COLORS.muted,fontSize:14}}>Carregant...</div>
+  );
+
+  // No access
+  if (!esAdmin && !permesos.includes(nomUsu)) return (
+    <div style={{textAlign:"center",padding:64,color:COLORS.muted}}>
+      <div style={{fontSize:36,marginBottom:12}}>🔒</div>
+      <div style={{fontSize:15,fontWeight:600,color:COLORS.text,marginBottom:6}}>No tens accés a aquesta secció</div>
+      <div style={{fontSize:13}}>Demana a l'administrador que t'activi l'accés.</div>
+    </div>
+  );
+
+  // ── Pestanya Accés (només admin) ─────────────────────────────────────────────
+  if (tabLocal === "acces") {
+    const noAdmins = (trabajadores || []).filter(u => u.rol !== "admin");
+    return (
+      <div>
+        {tabBar}
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {noAdmins.length === 0
+            ? <div style={{textAlign:"center",padding:32,color:COLORS.muted}}>Cap usuari</div>
+            : noAdmins.map(u => {
+                const actiu = permesos.includes(u.nombre);
+                return (
+                  <div key={u.id} style={{display:"flex",alignItems:"center",gap:14,
+                    padding:"14px 18px",borderRadius:12,border:`1px solid ${COLORS.border}`,
+                    background:COLORS.surface}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,fontSize:14}}>{u.nombre}</div>
+                      <div style={{fontSize:12,color:COLORS.muted,marginTop:2}}>
+                        {u.email} · {u.rol==="secretaria"?"Secretaria":u.rol==="encarregat"?"Encarregat":"Treballador"}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:12,color:actiu?COLORS.accent:COLORS.muted,fontWeight:500,minWidth:68,textAlign:"right"}}>
+                        {actiu ? "Activat" : "Desactivat"}
+                      </span>
+                      <div onClick={()=>!guardant&&toggleUsuari(u.nombre)}
+                        style={{width:44,height:24,borderRadius:12,
+                          cursor:guardant?"not-allowed":"pointer",
+                          background:actiu?COLORS.accent:COLORS.border,
+                          position:"relative",transition:"background .2s",flexShrink:0}}>
+                        <div style={{position:"absolute",top:3,
+                          left:actiu?22:3,width:18,height:18,borderRadius:"50%",
+                          background:"#fff",transition:"left .2s",
+                          boxShadow:"0 1px 4px rgba(0,0,0,.15)"}} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+          }
+        </div>
+      </div>
+    );
+  }
+
+  // ── Vista grid de fotos d'una data ────────────────────────────────────────────
   if (fechaOberta) return (
     <div>
+      {tabBar}
       <button className="btn btn-ghost" style={{marginBottom:16,fontSize:13}}
         onClick={()=>setFechaOberta(null)}>
         ← {fechaOberta.client} / {fechaOberta.fecha}
@@ -2757,13 +2856,13 @@ function DocFotosLocal() {
     </div>
   );
 
-  // ── Vista carpetes ─────────────────────────────────────────────────────────
+  // ── Vista carpetes ─────────────────────────────────────────────────────────────
   if (carregant) return <div style={{textAlign:"center",padding:48,color:COLORS.muted,fontSize:14}}>Carregant fotos del servidor...</div>;
   if (error)     return <div style={{textAlign:"center",padding:48,color:COLORS.warm,fontSize:14}}>⚠ {error}</div>;
 
   return (
     <div>
-      {/* Buscador */}
+      {tabBar}
       <div style={{position:"relative",marginBottom:20}}>
         <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",
           fontSize:15,color:COLORS.muted,pointerEvents:"none"}}>🔍</span>
@@ -2775,7 +2874,6 @@ function DocFotosLocal() {
           style={{paddingLeft:36,fontSize:14,width:"100%",maxWidth:340}}
         />
       </div>
-
       {clientesFiltrats.length === 0
         ? <div style={{textAlign:"center",padding:48,color:COLORS.muted}}>Cap client trobat</div>
         : <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -2785,38 +2883,30 @@ function DocFotosLocal() {
               return (
                 <div key={c.nombre} style={{borderRadius:12,border:`1px solid ${COLORS.border}`,
                   background:COLORS.surface,overflow:"hidden"}}>
-
-                  {/* Capçalera carpeta */}
                   <div onClick={()=>setClienteObert(obert ? null : c.nombre)}
                     style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",
                       cursor:"pointer",userSelect:"none",
-                      background: obert ? COLORS.accentLight : COLORS.surface,
-                      transition:"background .15s"}}
+                      background:obert?COLORS.accentLight:COLORS.surface,transition:"background .15s"}}
                     onMouseEnter={e=>{ if(!obert) e.currentTarget.style.background=COLORS.bg; }}
                     onMouseLeave={e=>{ if(!obert) e.currentTarget.style.background=COLORS.surface; }}>
                     <span style={{fontSize:22}}>{obert ? "📂" : "📁"}</span>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:600,fontSize:14,color:obert?COLORS.accent:COLORS.text}}>
-                        {c.nombre}
-                      </div>
+                      <div style={{fontWeight:600,fontSize:14,color:obert?COLORS.accent:COLORS.text}}>{c.nombre}</div>
                       <div style={{fontSize:11,color:COLORS.muted,marginTop:2}}>
                         {c.fechas.length} data{c.fechas.length!==1?"es":""} · {nFotos} foto{nFotos!==1?"s":""}
                       </div>
                     </div>
                     <span style={{fontSize:12,color:COLORS.muted,transition:"transform .2s",
-                      transform: obert?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+                      transform:obert?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
                   </div>
-
-                  {/* Llista de dates */}
                   {obert && (
                     <div style={{borderTop:`1px solid ${COLORS.border}`,padding:"10px 14px",
                       display:"flex",flexDirection:"column",gap:4}}>
                       {c.fechas.map(f=>(
                         <div key={f.fecha}
                           onClick={()=>obrirFecha(c.nombre, f.fecha, f.fotos)}
-                          style={{display:"flex",alignItems:"center",gap:10,
-                            padding:"10px 12px",borderRadius:8,cursor:"pointer",
-                            transition:"background .12s"}}
+                          style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                            borderRadius:8,cursor:"pointer",transition:"background .12s"}}
                           onMouseEnter={e=>e.currentTarget.style.background=COLORS.bg}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                           <span style={{fontSize:16}}>🗓</span>
@@ -2839,7 +2929,7 @@ function DocFotosLocal() {
   );
 }
 
-function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="fotos", verFotos=true }) {
+function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, initialTab="fotos", verFotos=true, usuarioInfo=null }) {
   const [tab, setTab] = useState(initialTab);
   const TABS = [
     {id:"fotos",       label:"Fotos",        icon:"📷"},
@@ -2860,7 +2950,7 @@ function Documents({ trabajadores, hojesTreball, albaranes, solaLectura=false, i
         ))}
       </div>
       {tab==="fotos"       && <DocFotos hojesTreball={hojesTreball} solaLectura={solaLectura} />}
-      {tab==="fotos-local" && <DocFotosLocal />}
+      {tab==="fotos-local" && <DocFotosLocal usuarioInfo={usuarioInfo} trabajadores={trabajadores} />}
       {tab==="albarans"    && <DocAlbarans albaranes={albaranes} />}
       {tab==="fulls"       && <DocFulls hojesTreball={hojesTreball} trabajadores={trabajadores} />}
     </div>
@@ -2988,6 +3078,7 @@ function VistaSecretaria({ usuarioInfo, fichajes, encargos, albaranes, trabajado
                   {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
                   {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
                   {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
+                  {section==="documents"&&<Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes} verFotos={permes.includes("verFotos")} usuarioInfo={usuarioInfo}/>}
                 </>
             }
           </div>
@@ -3051,7 +3142,7 @@ function VistaEncarregat({ usuarioInfo, fichajes, encargos, albaranes, trabajado
             {section==="fichajes"    && <Fichajes trabajadores={trabajadores} fichajes={fichajes}/>}
             {section==="encargos"    && <Encargos trabajadores={trabajadores} podeEliminar={false}/>}
             {section==="hojesTreball"&& <HojesTreball trabajadores={trabajadores} encargos={encargos} podeAprovar={true}/>}
-            {section==="documents"   && <Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes} verFotos={permes.includes("verFotos")}/>}
+            {section==="documents"   && <Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes} verFotos={true} usuarioInfo={usuarioInfo}/>}
           </div>
         </div>
       </div>
@@ -3250,7 +3341,7 @@ export default function App() {
             {section==="encargos"&&<Encargos trabajadores={trabajadores}/>}
             {section==="hojesTreball"&&<HojesTreball trabajadores={trabajadores} encargos={encargos}/>}
             {section==="albaranes"&&<Albaranes albaranes={albaranes}/>}
-            {section==="documents"&&<Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes}/>}
+            {section==="documents"&&<Documents trabajadores={trabajadores} hojesTreball={hojesTreball} albaranes={albaranes} usuarioInfo={usuarioInfo}/>}
           </div>
         </div>
       </div>
